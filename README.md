@@ -1,47 +1,5 @@
-# ForgeX 🔥
+# Vue 3 + TypeScript + Vite
 
-> 开发者快捷工具平台 — 一个平台，锻造无限工具
+This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
 
-## 特色
-
-- 🔧 一站式开发工具集合
-- ⚡ 纯前端计算，即开即用
-- 🧩 插件化架构，轻松扩展
-- 🌙 暗色极简设计
-
-## 开发
-
-```bash
-# 安装依赖
-pnpm install
-
-# 启动开发服务器
-pnpm dev
-
-# 构建
-pnpm build
-
-# 预览
-pnpm preview
-```
-
-## 添加新工具
-
-在 `src/tools/` 下创建目录：
-
-```
-src/tools/my-tool/
-├── index.ts      # 工具注册信息
-└── MyTool.vue    # 工具组件
-```
-
-工具会自动注册到路由和首页卡片。
-
-## 部署
-
-- GitHub Pages（自动）
-- Docker + Nginx（自托管）
-
-## License
-
-MIT
+Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).

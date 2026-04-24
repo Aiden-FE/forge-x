@@ -1,17 +1,35 @@
-# ForgeX 项目元信息
+# 项目元信息
 
-```yaml
-name: ForgeX
-created: 2026-04-23
-status: active
-tech_stack:
-  frontend: vue3 + vite + typescript
-  deploy: github-pages
-  container: docker + nginx
-current_version: v0.1.0
-github: https://github.com/Aiden-FE/forgex
-iterations:
-  - version: v0.1.0
-    date: 2026-04-23
-    summary: 初始版本 — 平台框架 + 示例工具
-```
+> 此文件记录项目的基本元数据，由 PM-Agent 维护
+
+## 项目概况
+
+- **项目名称**：ForgeX - 开发者快捷工具平台
+- **项目代号**：forge-x
+- **创建日期**：2026-04-23
+- **当前版本**：0.1.0
+- **项目负责人**：Aiden
+
+## 技术栈
+
+- **前端**：Vue 3 + TypeScript + Vite + Pinia + Vue Router
+- **UI组件**：lucide-vue-next（图标库）
+- **后端**：纯前端项目，无需后端
+- **部署方式**：静态部署 / GitHub Pages
+
+## 仓库信息
+
+- **Git 仓库**：git@github.com:Aiden-FE/forge-x.git
+- **分支策略**：main
+
+## 相关链接
+
+- **文档地址**：[链接]
+- **演示环境**：[链接]
+- **生产环境**：[链接]
+
+## 更新记录
+
+| 日期 | 版本 | 更新内容 |
+|------|------|----------|
+| YYYY-MM-DD | 0.1.0 | 项目初始化 |
