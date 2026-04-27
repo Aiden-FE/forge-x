@@ -9,14 +9,17 @@
       <input
         v-model="query"
         type="text"
-        placeholder="搜索工具... (按 /)"
+        :placeholder="t('search')"
         class="search-input"
         @input="onSearch"
         @keydown="handleKeydown"
       />
     </div>
     <div class="header-actions">
-      <button class="action-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色主题' : '切换暗色主题'">
+      <button class="action-btn" @click="toggleLocale" :title="locale === 'zh-CN' ? t('lang.switchToEn') : t('lang.switchToCn')">
+        {{ locale === 'zh-CN' ? 'EN' : '中' }}
+      </button>
+      <button class="action-btn" @click="toggleTheme" :title="theme === 'dark' ? t('theme.toggleLight') : t('theme.toggleDark')">
         <Sun v-if="theme === 'light'" :size="18" />
         <Moon v-else :size="18" />
       </button>
@@ -32,10 +35,12 @@ import { ref, onMounted } from 'vue'
 import { Search, Menu, Sun, Moon } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useThemeStore } from '@/stores/theme'
+import { useI18n } from '@/composables/useI18n'
 
 const emit = defineEmits(['toggle-sidebar'])
 const store = useToolsStore()
 const { theme, toggleTheme } = useThemeStore()
+const { t, locale, toggleLocale } = useI18n()
 const query = ref(store.searchQuery)
 
 function onSearch() {
