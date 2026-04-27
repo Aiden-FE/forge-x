@@ -2,34 +2,34 @@
   <ToolLayout :tool="toolMeta">
     <div class="json-tool">
       <div class="panel">
-        <label class="label">输入 JSON</label>
+        <label class="label">{{ t('jsonFormatter.label') }}</label>
         <textarea
           v-model="input"
           class="textarea"
-          placeholder="粘贴 JSON 内容..."
+          :placeholder="t('jsonFormatter.placeholder')"
           rows="10"
         />
       </div>
       <div class="actions">
         <button class="btn primary" @click="format">
           <Sparkles :size="16" />
-          格式化
+          {{ t('jsonFormatter.format') }}
         </button>
         <button class="btn" @click="minify">
           <Minimize2 :size="16" />
-          压缩
+          {{ t('jsonFormatter.minify') }}
         </button>
         <button class="btn" @click="copy">
           <Copy :size="16" />
-          复制
+          {{ t('jsonFormatter.copy') }}
         </button>
         <button class="btn" @click="clear">
           <Trash2 :size="16" />
-          清空
+          {{ t('jsonFormatter.clear') }}
         </button>
       </div>
       <div class="panel output">
-        <label class="label">输出结果</label>
+        <label class="label">{{ t('jsonFormatter.output') }}</label>
         <textarea
           v-model="output"
           class="textarea"
@@ -46,8 +46,11 @@
 import { ref } from 'vue'
 import { Sparkles, Minimize2, Copy, Trash2 } from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
+import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import JsonFormatter from './JsonFormatter.vue'
+
+const { t } = useI18n()
 
 const toolMeta: ToolMeta = {
   id: 'json-formatter',
@@ -69,7 +72,7 @@ function format() {
     const parsed = JSON.parse(input.value)
     output.value = JSON.stringify(parsed, null, 2)
   } catch (e: any) {
-    error.value = `解析错误: ${e.message}`
+    error.value = `${t('jsonFormatter.errParse')}: ${e.message}`
     output.value = ''
   }
 }
@@ -80,7 +83,7 @@ function minify() {
     const parsed = JSON.parse(input.value)
     output.value = JSON.stringify(parsed)
   } catch (e: any) {
-    error.value = `解析错误: ${e.message}`
+    error.value = `${t('jsonFormatter.errParse')}: ${e.message}`
     output.value = ''
   }
 }

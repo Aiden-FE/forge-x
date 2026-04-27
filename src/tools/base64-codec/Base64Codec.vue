@@ -2,34 +2,34 @@
   <ToolLayout :tool="toolMeta">
     <div class="base64-tool">
       <div class="panel">
-        <label class="label">输入内容</label>
+        <label class="label">{{ t('base64Codec.label') }}</label>
         <textarea
           v-model="input"
           class="textarea"
-          placeholder="输入要编码或解码的内容..."
+          :placeholder="t('base64Codec.placeholder')"
           rows="8"
         />
       </div>
       <div class="actions">
         <button class="btn primary" @click="encode">
           <ArrowUp :size="16" />
-          编码 → Base64
+          {{ t('base64Codec.encode') }}
         </button>
         <button class="btn" @click="decode">
           <ArrowDown :size="16" />
-          解码 ← Base64
+          {{ t('base64Codec.decode') }}
         </button>
         <button class="btn" @click="copy">
           <Copy :size="16" />
-          复制
+          {{ t('base64Codec.copy') }}
         </button>
         <button class="btn" @click="clear">
           <Trash2 :size="16" />
-          清空
+          {{ t('base64Codec.clear') }}
         </button>
       </div>
       <div class="panel output">
-        <label class="label">输出结果</label>
+        <label class="label">{{ t('base64Codec.output') }}</label>
         <textarea
           v-model="output"
           class="textarea"
@@ -46,8 +46,11 @@
 import { ref } from 'vue'
 import { ArrowUp, ArrowDown, Copy, Trash2 } from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
+import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import Base64Codec from './Base64Codec.vue'
+
+const { t } = useI18n()
 
 const toolMeta: ToolMeta = {
   id: 'base64-codec',
@@ -68,7 +71,7 @@ function encode() {
   try {
     output.value = btoa(unescape(encodeURIComponent(input.value)))
   } catch (e: any) {
-    error.value = `编码错误: ${e.message}`
+    error.value = `${t('base64Codec.errEncode')}: ${e.message}`
     output.value = ''
   }
 }
@@ -78,7 +81,7 @@ function decode() {
   try {
     output.value = decodeURIComponent(escape(atob(input.value)))
   } catch (e: any) {
-    error.value = `解码错误: 请输入有效的 Base64 字符串`
+    error.value = t('base64Codec.errDecode')
     output.value = ''
   }
 }

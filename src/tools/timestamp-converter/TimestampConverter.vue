@@ -3,47 +3,47 @@
     <div class="timestamp-tool">
       <div class="grid">
         <div class="panel">
-          <label class="label">时间戳</label>
+          <label class="label">{{ t('timestamp.label') }}</label>
           <input
             v-model="timestamp"
             type="text"
             class="input"
-            placeholder="输入时间戳 (秒或毫秒)"
+            :placeholder="t('timestamp.placeholder')"
           />
           <button class="btn primary" @click="fromTimestamp">
             <ArrowDown :size="16" />
-            转换为日期
+            {{ t('timestamp.toDate') }}
           </button>
         </div>
         <div class="panel">
-          <label class="label">日期时间</label>
+          <label class="label">{{ t('timestamp.dateTime') }}</label>
           <input
             v-model="datetime"
             type="text"
             class="input"
-            placeholder="输入日期 (YYYY-MM-DD HH:mm:ss)"
+            :placeholder="t('timestamp.placeholderDate')"
           />
           <button class="btn" @click="toTimestamp">
             <ArrowUp :size="16" />
-            转换为时间戳
+            {{ t('timestamp.toTimestamp') }}
           </button>
         </div>
       </div>
       <div class="current">
         <div class="current-row">
-          <span class="current-label">当前时间戳</span>
+          <span class="current-label">{{ t('timestamp.currentTs') }}</span>
           <code class="current-value">{{ currentTimestamp }}</code>
           <button class="btn small" @click="copyCurrent">
             <Copy :size="14" />
           </button>
         </div>
         <div class="current-row">
-          <span class="current-label">当前时间</span>
+          <span class="current-label">{{ t('timestamp.currentTime') }}</span>
           <code class="current-value">{{ currentDatetime }}</code>
         </div>
       </div>
       <div class="panel output">
-        <label class="label">转换结果</label>
+        <label class="label">{{ t('timestamp.result') }}</label>
         <div class="result">
           <code class="result-value">{{ result }}</code>
         </div>
@@ -57,8 +57,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ArrowUp, ArrowDown, Copy } from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
+import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import TimestampConverter from './TimestampConverter.vue'
+
+const { t } = useI18n()
 
 const toolMeta: ToolMeta = {
   id: 'timestamp-converter',
@@ -108,7 +111,7 @@ function fromTimestamp() {
   result.value = ''
   const ts = timestamp.value.trim()
   if (!ts) {
-    error.value = '请输入时间戳'
+    error.value = t('timestamp.errInput')
     return
   }
   let ms: number
@@ -118,7 +121,7 @@ function fromTimestamp() {
     ms = parseInt(ts) * 1000
   }
   if (isNaN(ms)) {
-    error.value = '无效的时间戳'
+    error.value = t('timestamp.errInvalid')
     return
   }
   result.value = formatDate(ms)
@@ -129,15 +132,15 @@ function toTimestamp() {
   result.value = ''
   const dt = datetime.value.trim()
   if (!dt) {
-    error.value = '请输入日期时间'
+    error.value = t('timestamp.errDatetime')
     return
   }
   const d = new Date(dt)
   if (d.toString() === 'Invalid Date') {
-    error.value = '无效的日期格式'
+    error.value = t('timestamp.errInvalidDate')
     return
   }
-  result.value = Math.floor(d.getTime() / 1000).toString() + ' (秒)\n' + d.getTime().toString() + ' (毫秒)'
+  result.value = Math.floor(d.getTime() / 1000).toString() + ` (${t('timestamp.seconds')})\n` + d.getTime().toString() + ` (${t('timestamp.milliseconds')})`
 }
 
 function copyCurrent() {

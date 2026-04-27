@@ -3,15 +3,15 @@
     <nav class="breadcrumb">
       <router-link to="/">{{ t('home') }}</router-link>
       <span class="sep">/</span>
-      <span class="current">{{ tool.name }}</span>
+      <span class="current">{{ localizedName }}</span>
     </nav>
     <header class="header">
       <div class="header-icon">
         <component :is="icon" :size="24" />
       </div>
       <div class="header-info">
-        <h1 class="title">{{ tool.name }}</h1>
-        <p class="desc">{{ tool.description }}</p>
+        <h1 class="title">{{ localizedName }}</h1>
+        <p class="desc">{{ localizedDesc }}</p>
       </div>
     </header>
     <div class="content">
@@ -29,6 +29,8 @@ import { useI18n } from '@/composables/useI18n'
 const props = defineProps<{ tool: ToolMeta }>()
 const { t } = useI18n()
 const icon = computed(() => (LucideIcons as any)[props.tool.icon] || LucideIcons.Box)
+const localizedName = computed(() => t(`tools.${props.tool.id}`, {}, props.tool.name))
+const localizedDesc = computed(() => t(`tools.${props.tool.id}Desc`, {}, props.tool.description))
 </script>
 
 <style scoped>
