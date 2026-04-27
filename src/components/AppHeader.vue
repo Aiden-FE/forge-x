@@ -1,6 +1,6 @@
 <template>
   <header class="header">
-    <div class="header-brand">
+    <div class="header-brand" @click="goHome">
       <span class="logo">🔥</span>
       <span class="title">ForgeX</span>
     </div>
@@ -32,6 +32,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search, Menu, Sun, Moon } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useThemeStore } from '@/stores/theme'
@@ -39,6 +40,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useI18n } from '@/composables/useI18n'
 
 const emit = defineEmits(['toggle-sidebar'])
+const router = useRouter()
 const store = useToolsStore()
 const storeTheme = useThemeStore()
 const storeLocale = useLocaleStore()
@@ -58,6 +60,10 @@ function handleKeydown(e: KeyboardEvent) {
 
 function focusSearch() {
   document.querySelector<HTMLInputElement>('.search-input')?.focus()
+}
+
+function goHome() {
+  router.push('/')
 }
 
 onMounted(() => {
@@ -88,6 +94,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  cursor: pointer;
+  user-select: none;
 }
 
 .logo { font-size: 20px; }
