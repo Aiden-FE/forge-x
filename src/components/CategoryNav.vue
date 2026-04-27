@@ -22,6 +22,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { X, LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useI18n } from '@/composables/useI18n'
@@ -29,6 +30,7 @@ import { useI18n } from '@/composables/useI18n'
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits(['close'])
 
+const router = useRouter()
 const store = useToolsStore()
 const { t } = useI18n()
 const categories = computed(() =>
@@ -45,6 +47,7 @@ const icons: Record<string, any> = {
 
 function selectCategory(id: string) {
   store.setActiveCategory(id)
+  router.push('/')
   emit('close')
 }
 </script>
