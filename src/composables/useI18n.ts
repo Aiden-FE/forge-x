@@ -1,4 +1,5 @@
 import { useLocaleStore } from '@/stores/locale'
+import { storeToRefs } from 'pinia'
 import type { LocaleMessages } from '@/locales/types'
 import zhCN from '@/locales/zh-CN'
 import en from '@/locales/en'
@@ -23,15 +24,16 @@ const messages: Record<Locale, LocaleMessages> = {
  */
 export function useI18n() {
   const store = useLocaleStore()
+  const { locale } = storeToRefs(store)
 
   /**
    * Translate a dot-separated key path.
-   * Depends on store.locale (a ref) so any computed using t() will
-   * reactively re-evaluate when locale changes.
+   * Depends on the locale ref (via storeToRefs) so any computed using t()
+   * will reactively re-evaluate when locale changes.
    */
   function t(key: string, params?: Record<string, string>, fallback?: string): string {
-    // Access store.locale to create a reactive dependency for computed
-    const _locale = store.locale
+    // Access locale.value to register reactive dependency in computed
+    const _locale = locale.value
     const messages_ = messages[_locale]
 
     const parts = key.split('.')
@@ -53,7 +55,7 @@ export function useI18n() {
 
   return {
     t,
-    locale: store.locale,
+    locale,
     toggleLocale: store.toggleLocale,
     setLocale: store.setLocale,
   }
