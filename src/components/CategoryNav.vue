@@ -21,15 +21,23 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { X, LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits(['close'])
 
 const store = useToolsStore()
-const categories = store.categories
-const activeCategory = store.activeCategory
+const { t } = useI18n()
+const categories = computed(() =>
+  store.categories.map(cat => ({
+    ...cat,
+    label: cat.id === 'all' ? t('allCategories') : t(`categories.${cat.id}`),
+  }))
+)
+const activeCategory = computed(() => store.activeCategory)
 
 const icons: Record<string, any> = {
   LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight

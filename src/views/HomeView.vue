@@ -4,7 +4,7 @@
       <ToolCard v-for="tool in filteredTools" :key="tool.id" :tool="tool" />
     </div>
     <div v-if="filteredTools.length === 0" class="empty">
-      <p class="empty-text">暂无匹配的工具</p>
+      <p class="empty-text">{{ t('noMatch') }}</p>
     </div>
   </div>
 </template>
@@ -13,8 +13,10 @@
 import { computed } from 'vue'
 import ToolCard from '@/components/ToolCard.vue'
 import { useToolsStore } from '@/stores/tools'
+import { useI18n } from '@/composables/useI18n'
 
 const store = useToolsStore()
+const { t } = useI18n()
 const filteredTools = computed(() => store.filteredTools)
 </script>
 

@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <nav class="breadcrumb">
-      <router-link to="/">首页</router-link>
+      <router-link to="/">{{ t('home') }}</router-link>
       <span class="sep">/</span>
       <span class="current">{{ tool.name }}</span>
     </nav>
@@ -24,8 +24,10 @@
 import { computed } from 'vue'
 import * as LucideIcons from 'lucide-vue-next'
 import type { ToolMeta } from '@/types/tool'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{ tool: ToolMeta }>()
+const { t } = useI18n()
 const icon = computed(() => (LucideIcons as any)[props.tool.icon] || LucideIcons.Box)
 </script>
 

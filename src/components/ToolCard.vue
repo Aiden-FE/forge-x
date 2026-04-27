@@ -4,8 +4,8 @@
       <component :is="icon" :size="32" />
     </div>
     <div class="card-content">
-      <h3 class="card-title">{{ tool.name }}</h3>
-      <p class="card-desc">{{ tool.description }}</p>
+      <h3 class="card-title">{{ localizedName }}</h3>
+      <p class="card-desc">{{ localizedDesc }}</p>
       <span class="card-tag">{{ categoryLabel }}</span>
     </div>
   </div>
@@ -17,12 +17,16 @@ import { useRouter } from 'vue-router'
 import * as LucideIcons from 'lucide-vue-next'
 import type { ToolMeta } from '@/types/tool'
 import { useToolsStore } from '@/stores/tools'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{ tool: ToolMeta }>()
 const router = useRouter()
 const store = useToolsStore()
+const { t } = useI18n()
 
 const icon = computed(() => (LucideIcons as any)[props.tool.icon] || LucideIcons.Box)
+const localizedName = computed(() => t(`tools.${props.tool.id}`, {}, props.tool.name))
+const localizedDesc = computed(() => t(`tools.${props.tool.id}Desc`, {}, props.tool.description))
 const categoryLabel = computed(() =>
   store.categories.find(c => c.id === props.tool.category)?.label || props.tool.category
 )

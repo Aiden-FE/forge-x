@@ -18,6 +18,12 @@
 import { ref } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import CategoryNav from '@/components/CategoryNav.vue'
+import { useThemeStore } from '@/stores/theme'
+import { useLocaleStore } from '@/stores/locale'
+
+// Init theme & i18n — the stores apply on creation via watch({ immediate: true })
+useThemeStore()
+useLocaleStore()
 
 const sidebarOpen = ref(false)
 </script>
