@@ -21,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { X, LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 
@@ -29,7 +30,7 @@ const emit = defineEmits(['close'])
 
 const store = useToolsStore()
 const categories = store.categories
-const activeCategory = store.activeCategory
+const activeCategory = computed(() => store.activeCategory)
 
 const icons: Record<string, any> = {
   LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight
