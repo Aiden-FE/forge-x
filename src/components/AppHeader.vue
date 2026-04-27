@@ -16,11 +16,11 @@
       />
     </div>
     <div class="header-actions">
-      <button class="action-btn" @click="toggleLocale" :title="locale === 'zh-CN' ? t('lang.switchToEn') : t('lang.switchToCn')">
-        {{ locale === 'zh-CN' ? 'EN' : '中' }}
+      <button class="action-btn" @click="storeLocale.toggleLocale()" :title="storeLocale.locale === 'zh-CN' ? t('lang.switchToEn') : t('lang.switchToCn')">
+        {{ storeLocale.locale === 'zh-CN' ? 'EN' : '中' }}
       </button>
-      <button class="action-btn" @click="toggleTheme" :title="theme === 'dark' ? t('theme.toggleLight') : t('theme.toggleDark')">
-        <Sun v-if="theme === 'light'" :size="18" />
+      <button class="action-btn" @click="storeTheme.toggleTheme()" :title="storeTheme.theme === 'dark' ? t('theme.toggleLight') : t('theme.toggleDark')">
+        <Sun v-if="storeTheme.theme === 'light'" :size="18" />
         <Moon v-else :size="18" />
       </button>
       <button class="menu-btn" @click="$emit('toggle-sidebar')">
@@ -35,12 +35,14 @@ import { ref, onMounted } from 'vue'
 import { Search, Menu, Sun, Moon } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useThemeStore } from '@/stores/theme'
+import { useLocaleStore } from '@/stores/locale'
 import { useI18n } from '@/composables/useI18n'
 
 const emit = defineEmits(['toggle-sidebar'])
 const store = useToolsStore()
-const { theme, toggleTheme } = useThemeStore()
-const { t, locale, toggleLocale } = useI18n()
+const storeTheme = useThemeStore()
+const storeLocale = useLocaleStore()
+const { t } = useI18n()
 const query = ref(store.searchQuery)
 
 function onSearch() {
