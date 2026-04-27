@@ -15,19 +15,27 @@
         @keydown="handleKeydown"
       />
     </div>
-    <button class="menu-btn" @click="$emit('toggle-sidebar')">
-      <Menu :size="20" />
-    </button>
+    <div class="header-actions">
+      <button class="action-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色主题' : '切换暗色主题'">
+        <Sun v-if="theme === 'light'" :size="18" />
+        <Moon v-else :size="18" />
+      </button>
+      <button class="menu-btn" @click="$emit('toggle-sidebar')">
+        <Menu :size="20" />
+      </button>
+    </div>
   </header>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Search, Menu } from 'lucide-vue-next'
+import { Search, Menu, Sun, Moon } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
+import { useThemeStore } from '@/stores/theme'
 
 const emit = defineEmits(['toggle-sidebar'])
 const store = useToolsStore()
+const { theme, toggleTheme } = useThemeStore()
 const query = ref(store.searchQuery)
 
 function onSearch() {
@@ -107,14 +115,43 @@ onMounted(() => {
 
 .search-input::placeholder { color: var(--text-tertiary); }
 
-.menu-btn {
-  display: none;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: var(--space-sm);
   color: var(--text-secondary);
   cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
 @media (max-width: 768px) {

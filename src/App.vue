@@ -18,6 +18,10 @@
 import { ref } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import CategoryNav from '@/components/CategoryNav.vue'
+import { useThemeStore } from '@/stores/theme'
+
+// Init theme — the store's watch({ immediate: true }) applies it on creation
+useThemeStore()
 
 const sidebarOpen = ref(false)
 </script>

@@ -1,8 +1,10 @@
-/* ForgeX Design Tokens — Linear Dark Theme */
+/* ForgeX Design Tokens — Shared */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;510;590;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('./themes/dark.css');
+@import url('./themes/light.css');
 
 :root {
-  /* Backgrounds */
+  /* Default to dark theme */
   --bg-canvas: #08090a;
   --bg-panel: #0f1011;
   --bg-surface: #191a1b;
@@ -10,28 +12,23 @@
   --bg-card: rgba(255, 255, 255, 0.02);
   --bg-card-hover: rgba(255, 255, 255, 0.05);
 
-  /* Text */
   --text-primary: #f7f8f8;
   --text-secondary: #d0d6e0;
   --text-tertiary: #8a8f98;
   --text-quaternary: #62666d;
 
-  /* Brand */
   --accent: #7170ff;
   --accent-bg: #5e6ad2;
   --accent-hover: #828fff;
 
-  /* Status */
   --success: #10b981;
   --warning: #fbbf24;
   --error: #f87171;
 
-  /* Borders */
   --border: rgba(255, 255, 255, 0.08);
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-focus: rgba(113, 112, 255, 0.5);
 
-  /* Shadows */
   --shadow-card: rgba(0, 0, 0, 0.2) 0px 0px 0px 1px;
   --shadow-elevated: rgba(0, 0, 0, 0.4) 0px 2px 4px;
 
