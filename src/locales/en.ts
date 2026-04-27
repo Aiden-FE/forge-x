@@ -31,6 +31,46 @@ const en: LocaleMessages = {
     base64Codec: 'Base64 Encoder/Decoder',
     base64CodecDesc: 'Encode and decode Base64',
   },
+
+  /* Tool internal UI text */
+  timestamp: {
+    label: 'Timestamp',
+    placeholder: 'Enter timestamp (seconds or milliseconds)',
+    toDate: 'Convert to Date',
+    dateTime: 'Date & Time',
+    placeholderDate: 'Enter date (YYYY-MM-DD HH:mm:ss)',
+    toTimestamp: 'Convert to Timestamp',
+    currentTs: 'Current Timestamp',
+    currentTime: 'Current Time',
+    result: 'Result',
+    errInput: 'Please enter a timestamp',
+    errInvalid: 'Invalid timestamp',
+    errDatetime: 'Please enter a date & time',
+    errInvalidDate: 'Invalid date format',
+    seconds: 'seconds',
+    milliseconds: 'milliseconds',
+  },
+  jsonFormatter: {
+    label: 'Input JSON',
+    placeholder: 'Paste JSON content...',
+    format: 'Format',
+    minify: 'Minify',
+    copy: 'Copy',
+    clear: 'Clear',
+    output: 'Output',
+    errParse: 'Parse error',
+  },
+  base64Codec: {
+    label: 'Input',
+    placeholder: 'Enter content to encode/decode...',
+    encode: 'Encode → Base64',
+    decode: 'Decode ← Base64',
+    copy: 'Copy',
+    clear: 'Clear',
+    output: 'Output',
+    errEncode: 'Encode error',
+    errDecode: 'Decode error: please enter a valid Base64 string',
+  },
 }
 
 export default en
