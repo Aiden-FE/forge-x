@@ -28,7 +28,7 @@ const icon = computed(() => (LucideIcons as any)[props.tool.icon] || LucideIcons
 const localizedName = computed(() => t(`tools.${props.tool.id}`, {}, props.tool.name))
 const localizedDesc = computed(() => t(`tools.${props.tool.id}Desc`, {}, props.tool.description))
 const categoryLabel = computed(() =>
-  store.categories.find(c => c.id === props.tool.category)?.label || props.tool.category
+  t(`categories.${props.tool.category}`, {}, props.tool.category)
 )
 
 function navigate() {
