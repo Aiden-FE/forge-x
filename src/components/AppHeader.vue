@@ -56,6 +56,13 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault()
     focusSearch()
   }
+  if (e.key === 'Enter' && document.activeElement?.classList.contains('search-input')) {
+    e.preventDefault()
+    const filtered = store.filteredTools
+    if (filtered.length > 0) {
+      router.push(`/tool/${filtered[0].id}`)
+    }
+  }
 }
 
 function focusSearch() {
