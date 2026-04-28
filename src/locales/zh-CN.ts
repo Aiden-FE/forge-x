@@ -24,12 +24,12 @@ const zhCN: LocaleMessages = {
     switchToEn: '切换到英文',
   },
   tools: {
-    timestampConverter: '时间戳转换',
-    timestampConverterDesc: 'Unix 时间戳与日期互转',
-    jsonFormatter: 'JSON 格式化',
-    jsonFormatterDesc: '格式化、压缩和校验 JSON',
-    base64Codec: 'Base64 编解码',
-    base64CodecDesc: 'Base64 编码与解码',
+    'timestamp-converter': '时间戳转换',
+    'timestamp-converterDesc': 'Unix 时间戳与日期互转',
+    'json-formatter': 'JSON 格式化',
+    'json-formatterDesc': '格式化、压缩和校验 JSON',
+    'base64-codec': 'Base64 编解码',
+    'base64-codecDesc': 'Base64 编码与解码',
   },
 
   /* 工具内部 UI 文本 */

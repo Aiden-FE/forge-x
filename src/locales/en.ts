@@ -24,12 +24,12 @@ const en: LocaleMessages = {
     switchToEn: 'Switch to English',
   },
   tools: {
-    timestampConverter: 'Timestamp Converter',
-    timestampConverterDesc: 'Convert between Unix timestamp and date',
-    jsonFormatter: 'JSON Formatter',
-    jsonFormatterDesc: 'Format, minify and validate JSON',
-    base64Codec: 'Base64 Encoder/Decoder',
-    base64CodecDesc: 'Encode and decode Base64',
+    'timestamp-converter': 'Timestamp Converter',
+    'timestamp-converterDesc': 'Convert between Unix timestamp and date',
+    'json-formatter': 'JSON Formatter',
+    'json-formatterDesc': 'Format, minify and validate JSON',
+    'base64-codec': 'Base64 Encoder/Decoder',
+    'base64-codecDesc': 'Encode and decode Base64',
   },
 
   /* Tool internal UI text */
