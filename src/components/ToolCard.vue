@@ -16,12 +16,10 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import * as LucideIcons from 'lucide-vue-next'
 import type { ToolMeta } from '@/types/tool'
-import { useToolsStore } from '@/stores/tools'
 import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{ tool: ToolMeta }>()
 const router = useRouter()
-const store = useToolsStore()
 const { t } = useI18n()
 
 const icon = computed(() => (LucideIcons as any)[props.tool.icon] || LucideIcons.Box)
