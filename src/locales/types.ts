@@ -22,12 +22,12 @@ export interface LocaleMessages {
     switchToEn: string
   }
   tools: {
-    timestampConverter: string
-    timestampConverterDesc: string
-    jsonFormatter: string
-    jsonFormatterDesc: string
-    base64Codec: string
-    base64CodecDesc: string
+    'timestamp-converter': string
+    'timestamp-converterDesc': string
+    'json-formatter': string
+    'json-formatterDesc': string
+    'base64-codec': string
+    'base64-codecDesc': string
   }
   timestamp: {
     label: string
