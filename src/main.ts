@@ -8,9 +8,12 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
 
-// Register all tools after pinia is ready
+// Register all tools BEFORE installing the router: dynamic tool routes must
+// exist before the router resolves the initial location on a direct page load
+// (e.g. opening /#/tool/<id> in a fresh browser).
 registerAllTools()
+
+app.use(router)
 
 app.mount('#app')

@@ -30,6 +30,8 @@ const en: LocaleMessages = {
     'json-formatterDesc': 'Format, minify and validate JSON',
     'base64-codec': 'Base64 Encoder/Decoder',
     'base64-codecDesc': 'Encode and decode Base64',
+    'diffchecker': 'Diff Checker',
+    'diffcheckerDesc': 'Compare two texts and highlight differences',
   },
 
   /* Tool internal UI text */
@@ -70,6 +72,20 @@ const en: LocaleMessages = {
     output: 'Output',
     errEncode: 'Encode error',
     errDecode: 'Decode error: please enter a valid Base64 string',
+  },
+  diffchecker: {
+    labelOld: 'Old text',
+    labelNew: 'New text',
+    placeholder: 'Paste text...',
+    compare: 'Compare',
+    swap: 'Swap',
+    ignoreWhitespace: 'Ignore whitespace',
+    viewSide: 'Side-by-side',
+    viewUnified: 'Unified view',
+    copy: 'Copy',
+    clear: 'Clear',
+    empty: 'Enter text on both sides, then click Compare',
+    resultSame: 'The two texts are identical',
   },
 }
 

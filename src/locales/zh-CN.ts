@@ -30,6 +30,8 @@ const zhCN: LocaleMessages = {
     'json-formatterDesc': '格式化、压缩和校验 JSON',
     'base64-codec': 'Base64 编解码',
     'base64-codecDesc': 'Base64 编码与解码',
+    'diffchecker': '文本差异对比',
+    'diffcheckerDesc': '对比两份文本，高亮差异',
   },
 
   /* 工具内部 UI 文本 */
@@ -70,6 +72,20 @@ const zhCN: LocaleMessages = {
     output: '输出结果',
     errEncode: '编码错误',
     errDecode: '解码错误: 请输入有效的 Base64 字符串',
+  },
+  diffchecker: {
+    labelOld: '旧文本',
+    labelNew: '新文本',
+    placeholder: '粘贴文本...',
+    compare: '对比',
+    swap: '交换',
+    ignoreWhitespace: '忽略空白',
+    viewSide: '左右分栏',
+    viewUnified: '统一视图',
+    copy: '复制',
+    clear: '清空',
+    empty: '请先在左右两侧输入文本，再点击「对比」',
+    resultSame: '两份文本相同',
   },
 }
 

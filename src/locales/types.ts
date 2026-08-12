@@ -28,6 +28,8 @@ export interface LocaleMessages {
     'json-formatterDesc': string
     'base64-codec': string
     'base64-codecDesc': string
+    'diffchecker': string
+    'diffcheckerDesc': string
   }
   timestamp: {
     label: string
@@ -66,6 +68,20 @@ export interface LocaleMessages {
     output: string
     errEncode: string
     errDecode: string
+  }
+  diffchecker: {
+    labelOld: string
+    labelNew: string
+    placeholder: string
+    compare: string
+    swap: string
+    ignoreWhitespace: string
+    viewSide: string
+    viewUnified: string
+    copy: string
+    clear: string
+    empty: string
+    resultSame: string
   }
   [key: string]: any
 }
