@@ -17,6 +17,12 @@ export default defineConfig({
         channel: 'chrome',
       },
     },
+    {
+      name: 'webkit',
+      use: {
+        browserName: 'webkit',
+      },
+    },
   ],
   webServer: {
     command: 'pnpm dev --port 5173 --strictPort',

@@ -32,6 +32,8 @@ const zhCN: LocaleMessages = {
     'base64-codecDesc': 'Base64 编码与解码',
     'diffchecker': '文本差异对比',
     'diffcheckerDesc': '对比两份文本，高亮差异',
+    'webp-converter': 'WebP 转换器',
+    'webp-converterDesc': '批量将图片转换为 WebP 格式',
   },
 
   /* 工具内部 UI 文本 */
@@ -86,6 +88,29 @@ const zhCN: LocaleMessages = {
     clear: '清空',
     empty: '请先在左右两侧输入文本，再点击「对比」',
     resultSame: '两份文本相同',
+  },
+  webpConverter: {
+    dropHint: '拖拽图片到此处，或',
+    chooseFiles: '点击选择文件',
+    addMore: '拖拽或点击添加更多图片',
+    supportedFormats: '支持 PNG / JPEG / GIF / BMP / SVG / WebP',
+    limits: '单文件 ≤ 20MB · 最长边 ≤ 8192px · 最多 50 个文件',
+    quality: '质量',
+    downloadAll: '全部下载 (zip)',
+    clear: '清空',
+    settingsChanged: '设置已变更',
+    reconvert: '重新转换',
+    converting: '转换中…',
+    firstFrame: '仅第一帧',
+    download: '下载',
+    remove: '移除',
+    errUnsupported: '不支持的格式',
+    errTooLarge: '文件超过 20MB',
+    errTooMany: '文件数量超过 50',
+    errTooBig: '图片尺寸超出上限',
+    errSvgNoSize: 'SVG 无尺寸信息',
+    errDecode: '图片解码失败',
+    errEncode: 'WebP 编码失败',
   },
 }
 

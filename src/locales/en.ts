@@ -32,6 +32,8 @@ const en: LocaleMessages = {
     'base64-codecDesc': 'Encode and decode Base64',
     'diffchecker': 'Diff Checker',
     'diffcheckerDesc': 'Compare two texts and highlight differences',
+    'webp-converter': 'WebP Converter',
+    'webp-converterDesc': 'Batch convert images to WebP format',
   },
 
   /* Tool internal UI text */
@@ -86,6 +88,29 @@ const en: LocaleMessages = {
     clear: 'Clear',
     empty: 'Enter text on both sides, then click Compare',
     resultSame: 'The two texts are identical',
+  },
+  webpConverter: {
+    dropHint: 'Drag images here, or',
+    chooseFiles: 'Click to select files',
+    addMore: 'Drag or click to add more images',
+    supportedFormats: 'Supports PNG / JPEG / GIF / BMP / SVG / WebP',
+    limits: 'Max 20MB per file · Max side 8192px · Up to 50 files',
+    quality: 'Quality',
+    downloadAll: 'Download all (zip)',
+    clear: 'Clear',
+    settingsChanged: 'Settings changed',
+    reconvert: 'Re-convert',
+    converting: 'Converting…',
+    firstFrame: 'First frame only',
+    download: 'Download',
+    remove: 'Remove',
+    errUnsupported: 'Unsupported format',
+    errTooLarge: 'File exceeds 20MB',
+    errTooMany: 'Too many files (max 50)',
+    errTooBig: 'Image dimensions exceed the limit',
+    errSvgNoSize: 'SVG has no size information',
+    errDecode: 'Failed to decode image',
+    errEncode: 'WebP encoding failed',
   },
 }
 

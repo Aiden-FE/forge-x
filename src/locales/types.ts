@@ -30,6 +30,8 @@ export interface LocaleMessages {
     'base64-codecDesc': string
     'diffchecker': string
     'diffcheckerDesc': string
+    'webp-converter': string
+    'webp-converterDesc': string
   }
   timestamp: {
     label: string
@@ -82,6 +84,29 @@ export interface LocaleMessages {
     clear: string
     empty: string
     resultSame: string
+  }
+  webpConverter: {
+    dropHint: string
+    chooseFiles: string
+    addMore: string
+    supportedFormats: string
+    limits: string
+    quality: string
+    downloadAll: string
+    clear: string
+    settingsChanged: string
+    reconvert: string
+    converting: string
+    firstFrame: string
+    download: string
+    remove: string
+    errUnsupported: string
+    errTooLarge: string
+    errTooMany: string
+    errTooBig: string
+    errSvgNoSize: string
+    errDecode: string
+    errEncode: string
   }
   [key: string]: any
 }

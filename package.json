@@ -11,7 +11,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@jsquash/webp": "^1.5.0",
     "diff": "^9.0.0",
+    "jszip": "^3.10.1",
     "lucide-vue-next": "^1.0.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",
@@ -22,6 +24,7 @@
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",
+    "omggif": "1.0.10",
     "typescript": "~6.0.2",
     "vite": "^8.0.10",
     "vitest": "^4.1.10",
