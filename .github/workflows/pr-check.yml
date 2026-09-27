@@ -49,6 +49,7 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
         with:
+          toolchain: stable
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || 'x86_64-pc-windows-msvc' }}
       - run: pnpm install --frozen-lockfile
       - run: node scripts/check-version.mjs && node scripts/verify-release-config.mjs
