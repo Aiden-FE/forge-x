@@ -1,5 +1,10 @@
-/* ForgeX Design Tokens */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;510;590;600&family=JetBrains+Mono:wght@400;500&display=swap');
+/* ForgeX Design Tokens
+ *
+ * Web and desktop both must run offline. Inter / JetBrains Mono were
+ * previously pulled from Google Fonts; remove that and rely on the
+ * platform's UI font stack. The visual hierarchy stays the same in the
+ * limits of system-font availability.
+ */
 
 /* ============================================================
  * THEME-SPECIFIC CSS VARIABLES
@@ -99,9 +104,10 @@
   --radius-xl: 12px;
   --radius-pill: 9999px;
 
-  /* Fonts */
-  --font-primary: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Fonts — system stack. Inter is no longer loaded; UI relies on the
+     OS font. WebKit on macOS → San Francisco, WebView2 on Windows → Segoe UI. */
+  --font-primary: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 
   /* Spacing */
   --space-xs: 4px;

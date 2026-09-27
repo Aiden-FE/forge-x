@@ -15,17 +15,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import CategoryNav from '@/components/CategoryNav.vue'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
+import { onNativeNavHome } from '@/lib/desktop'
 
 // Init theme & i18n — the stores apply on creation via watch({ immediate: true })
 useThemeStore()
 useLocaleStore()
 
 const sidebarOpen = ref(false)
+const router = useRouter()
+
+// Native menu "Home" event (Tauri only). The router push satisfies the spec
+// "重新打开回到首页" rule when the menu sends `forgex://nav /`.
+onMounted(() => {
+  onNativeNavHome(() => router.push('/'))
+})
 </script>
 
 <style>

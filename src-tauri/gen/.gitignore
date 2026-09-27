@@ -1,0 +1,3 @@
+# This directory is populated by `tauri dev` and `tauri build`. It holds the
+# generated JSON schemas and capability metadata. Keeping it empty in the
+# repo prevents stale files from breaking local builds.

@@ -1,17 +1,24 @@
 {
   "name": "forgex",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:tauri": "tauri dev",
     "build": "vue-tsc -b && vite build",
+    "build:tauri": "vue-tsc -b && vite build && tauri build --no-bundle",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:version": "node scripts/check-version.mjs",
+    "verify:release-config": "node scripts/verify-release-config.mjs",
+    "check:release": "pnpm check:version && pnpm verify:release-config",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@jsquash/webp": "^1.5.0",
+    "@tauri-apps/api": "^2.0.0",
     "diff": "^9.0.0",
     "jszip": "^3.10.1",
     "lucide-vue-next": "^1.0.0",
@@ -21,6 +28,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@tauri-apps/cli": "^2.0.0",
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",

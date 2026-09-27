@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for the ForgeX main window. The spec only requires a native application menu (handled in lib.rs) — file open/save dialogs come from the WebView's <input type=file> and <a download> elements, so we do not expose any extra plugins.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

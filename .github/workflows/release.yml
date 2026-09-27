@@ -1,0 +1,133 @@
+name: Release candidate
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      commit: ${{ steps.identity.outputs.commit }}
+      tag_object: ${{ steps.identity.outputs.tag_object }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/check-version.mjs --require-tag "$GITHUB_REF_NAME"
+          node scripts/verify-release-config.mjs
+          tag_object=$(git rev-parse "refs/tags/$GITHUB_REF_NAME")
+          commit=$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")
+          test "$commit" = "$GITHUB_SHA"
+          pr_check=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$commit&status=completed&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/pr-check.yml" and .conclusion == "success")] | length')
+          test "$pr_check" -gt 0 || { echo '::error::no successful Desktop PR checks run for tagged commit'; exit 1; }
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag_object=$tag_object" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: universal-apple-darwin
+            bundles: dmg
+            artifact: macos-universal
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            artifact: windows-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: stable
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-version.mjs --require-tag "${{ needs.prepare.outputs.tag }}" && node scripts/verify-release-config.mjs
+      - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --ci
+      - name: Verify and stage macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.tag }}"
+          dmg="src-tauri/target/universal-apple-darwin/release/bundle/dmg/ForgeX_${version#v}_universal.dmg"
+          test -s "$dmg"
+          hdiutil attach "$dmg" -mountpoint "$RUNNER_TEMP/forgex" -nobrowse -quiet
+          trap 'hdiutil detach "$RUNNER_TEMP/forgex" -quiet' EXIT
+          app="$RUNNER_TEMP/forgex/ForgeX.app"
+          test -d "$app"
+          lipo -info "$app/Contents/MacOS/forgex" | tee "$RUNNER_TEMP/forgex-lipo.txt"
+          grep -q arm64 "$RUNNER_TEMP/forgex-lipo.txt"
+          grep -q x86_64 "$RUNNER_TEMP/forgex-lipo.txt"
+          codesign --verify --deep --strict "$app"
+          codesign -dv "$app" 2>&1 | grep -Eiq 'Signature[[:space:]]*=[[:space:]]*adhoc'
+          mkdir -p release
+          cp "$dmg" release/
+      - name: Verify and stage Windows NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = '${{ needs.prepare.outputs.tag }}'.Substring(1)
+          $outputDir = 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $installers = @(Get-ChildItem -Path $outputDir -Filter '*-setup.exe')
+          if ($installers.Count -ne 1) { throw "Expected exactly one NSIS setup.exe, got $($installers.Count)" }
+          if ((Get-AuthenticodeSignature $installers[0].FullName).Status -ne 'NotSigned') { throw 'NSIS must be unsigned in v1' }
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item $installers[0].FullName "release/ForgeX_${version}_x64-setup.exe"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: forgex-${{ matrix.artifact }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 90
+
+  candidate:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: forgex-*
+          path: release
+          merge-multiple: true
+      - name: Bind exact candidate assets to tag and run
+        run: |
+          node scripts/release-artifacts.mjs create release "${{ needs.prepare.outputs.tag }}" "${{ needs.prepare.outputs.commit }}" "${{ needs.prepare.outputs.tag_object }}" "$GITHUB_RUN_ID"
+      - name: Create candidate-bound QA evidence template
+        run: node scripts/create-qa-template.mjs release "${{ needs.prepare.outputs.tag }}" "${{ needs.prepare.outputs.commit }}" "${{ needs.prepare.outputs.tag_object }}" "$GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate
+          path: release/*
+          if-no-files-found: error
+          retention-days: 90
