@@ -6,24 +6,25 @@
         <textarea
           v-model="input"
           class="textarea"
+          data-test="b64-input"
           :placeholder="t('base64Codec.placeholder')"
           rows="8"
         />
       </div>
       <div class="actions">
-        <button class="btn primary" @click="encode">
+        <button class="btn primary" data-test="b64-encode" @click="encode">
           <ArrowUp :size="16" />
           {{ t('base64Codec.encode') }}
         </button>
-        <button class="btn" @click="decode">
+        <button class="btn" data-test="b64-decode" @click="decode">
           <ArrowDown :size="16" />
           {{ t('base64Codec.decode') }}
         </button>
-        <button class="btn" @click="copy">
+        <button class="btn" data-test="b64-copy" @click="copy">
           <Copy :size="16" />
           {{ t('base64Codec.copy') }}
         </button>
-        <button class="btn" @click="clear">
+        <button class="btn" data-test="b64-clear" @click="clear">
           <Trash2 :size="16" />
           {{ t('base64Codec.clear') }}
         </button>
@@ -33,10 +34,11 @@
         <textarea
           v-model="output"
           class="textarea"
+          data-test="b64-output"
           readonly
           rows="8"
         />
-        <p v-if="error" class="error">{{ error }}</p>
+        <p v-if="error" class="error" data-test="b64-error">{{ error }}</p>
       </div>
     </div>
   </ToolLayout>

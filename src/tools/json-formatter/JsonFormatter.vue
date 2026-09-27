@@ -6,24 +6,25 @@
         <textarea
           v-model="input"
           class="textarea"
+          data-test="json-input"
           :placeholder="t('jsonFormatter.placeholder')"
           rows="10"
         />
       </div>
       <div class="actions">
-        <button class="btn primary" @click="format">
+        <button class="btn primary" data-test="json-format" @click="format">
           <Sparkles :size="16" />
           {{ t('jsonFormatter.format') }}
         </button>
-        <button class="btn" @click="minify">
+        <button class="btn" data-test="json-minify" @click="minify">
           <Minimize2 :size="16" />
           {{ t('jsonFormatter.minify') }}
         </button>
-        <button class="btn" @click="copy">
+        <button class="btn" data-test="json-copy" @click="copy">
           <Copy :size="16" />
           {{ t('jsonFormatter.copy') }}
         </button>
-        <button class="btn" @click="clear">
+        <button class="btn" data-test="json-clear" @click="clear">
           <Trash2 :size="16" />
           {{ t('jsonFormatter.clear') }}
         </button>
@@ -33,10 +34,11 @@
         <textarea
           v-model="output"
           class="textarea"
+          data-test="json-output"
           readonly
           rows="10"
         />
-        <p v-if="error" class="error">{{ error }}</p>
+        <p v-if="error" class="error" data-test="json-error">{{ error }}</p>
       </div>
     </div>
   </ToolLayout>

@@ -8,9 +8,10 @@
             v-model="timestamp"
             type="text"
             class="input"
+            data-test="ts-input"
             :placeholder="t('timestamp.placeholder')"
           />
-          <button class="btn primary" @click="fromTimestamp">
+          <button class="btn primary" data-test="ts-to-date" @click="fromTimestamp">
             <ArrowDown :size="16" />
             {{ t('timestamp.toDate') }}
           </button>
@@ -21,9 +22,10 @@
             v-model="datetime"
             type="text"
             class="input"
+            data-test="ts-datetime"
             :placeholder="t('timestamp.placeholderDate')"
           />
-          <button class="btn" @click="toTimestamp">
+          <button class="btn" data-test="ts-from-date" @click="toTimestamp">
             <ArrowUp :size="16" />
             {{ t('timestamp.toTimestamp') }}
           </button>
@@ -45,9 +47,9 @@
       <div class="panel output">
         <label class="label">{{ t('timestamp.result') }}</label>
         <div class="result">
-          <code class="result-value">{{ result }}</code>
+          <code class="result-value" data-test="ts-result">{{ result }}</code>
         </div>
-        <p v-if="error" class="error">{{ error }}</p>
+        <p v-if="error" class="error" data-test="ts-error">{{ error }}</p>
       </div>
     </div>
   </ToolLayout>

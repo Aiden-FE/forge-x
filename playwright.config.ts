@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:5173/forge-x/',
+    baseURL: 'http://localhost:5175/forge-x/',
     trace: 'on-first-retry',
   },
   projects: [
@@ -25,9 +25,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev --port 5173 --strictPort',
-    url: 'http://localhost:5173/forge-x/',
-    reuseExistingServer: true,
+    command: 'pnpm dev --port 5175 --strictPort',
+    url: 'http://localhost:5175/forge-x/',
+    reuseExistingServer: !process.env.CI && process.env.REUSE_EXISTING_VITE === 'true',
     timeout: 30000,
   },
 })
