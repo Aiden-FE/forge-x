@@ -22,5 +22,13 @@ assert(cfg.app.security.csp.includes("'wasm-unsafe-eval'"), 'WebP WASM CSP permi
 assert(!/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(css), 'remote fonts remain')
 assert(html.includes('href="./favicon.svg"'), 'desktop favicon must be relative')
 assert(caps.windows?.length === 1 && caps.windows[0] === 'main', 'capability window scope changed')
-assert(caps.permissions.length === 1 && caps.permissions[0] === 'core:default', 'unexpected native permissions')
+assert(
+  JSON.stringify(caps.permissions) === JSON.stringify([
+    'core:default',
+    'allow-provider-secret-delete',
+    'allow-provider-secret-get',
+    'allow-provider-secret-set',
+  ]),
+  'unexpected native permissions',
+)
 console.log('release configuration verified')

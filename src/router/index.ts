@@ -9,6 +9,11 @@ const routes: RouteRecordRaw[] = [
     name: 'home',
     component: () => import('@/views/HomeView.vue'),
   },
+  {
+    path: '/settings/providers',
+    name: 'provider-settings',
+    component: () => import('@/views/ProviderSettingsView.vue'),
+  },
 ]
 
 const router = createRouter({

@@ -16,6 +16,9 @@
       />
     </div>
     <div class="header-actions">
+      <button class="action-btn" :title="t('settings.title')" @click="openSettings">
+        <Settings :size="18" />
+      </button>
       <button class="action-btn" @click="storeLocale.toggleLocale()" :title="storeLocale.locale === 'zh-CN' ? t('lang.switchToEn') : t('lang.switchToCn')">
         {{ storeLocale.locale === 'zh-CN' ? 'EN' : '中' }}
       </button>
@@ -33,7 +36,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Menu, Sun, Moon } from 'lucide-vue-next'
+import { Search, Menu, Sun, Moon, Settings } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
@@ -71,6 +74,10 @@ function focusSearch() {
 
 function goHome() {
   router.push('/')
+}
+
+function openSettings() {
+  router.push({ name: 'provider-settings' })
 }
 
 onMounted(() => {
