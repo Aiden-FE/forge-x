@@ -14,9 +14,16 @@
 use tauri::menu::{AboutMetadata, MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, WindowEvent};
 
+mod secret_store;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            secret_store::provider_secret_delete,
+            secret_store::provider_secret_get,
+            secret_store::provider_secret_set,
+        ])
         .setup(|app| {
             // ----- Native menu -----
             // On macOS the OS expects an application menu (the one named after
@@ -65,9 +72,7 @@ pub fn run() {
                     .paste()
                     .select_all()
                     .build()?;
-                let menu = MenuBuilder::new(app)
-                    .items(&[&edit_menu])
-                    .build()?;
+                let menu = MenuBuilder::new(app).items(&[&edit_menu]).build()?;
                 if let Some(window) = app.get_webview_window("main") {
                     window.set_menu(menu)?;
                 }

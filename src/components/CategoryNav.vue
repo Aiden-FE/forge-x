@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { X, LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight } from 'lucide-vue-next'
+import { X, LayoutGrid, Languages, Binary, Braces, Sparkles, ArrowLeftRight } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useI18n } from '@/composables/useI18n'
 
@@ -42,7 +42,7 @@ const categories = computed(() =>
 const activeCategory = computed(() => store.activeCategory)
 
 const icons: Record<string, any> = {
-  LayoutGrid, Binary, Braces, Sparkles, ArrowLeftRight
+  LayoutGrid, Languages, Binary, Braces, Sparkles, ArrowLeftRight
 }
 
 function selectCategory(id: string) {

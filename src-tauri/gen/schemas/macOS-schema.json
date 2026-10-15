@@ -177,6 +177,42 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the provider_secret_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-provider-secret-delete",
+          "markdownDescription": "Enables the provider_secret_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the provider_secret_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-provider-secret-get",
+          "markdownDescription": "Enables the provider_secret_get command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the provider_secret_set command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-provider-secret-set",
+          "markdownDescription": "Enables the provider_secret_set command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the provider_secret_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-provider-secret-delete",
+          "markdownDescription": "Denies the provider_secret_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the provider_secret_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-provider-secret-get",
+          "markdownDescription": "Denies the provider_secret_get command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the provider_secret_set command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-provider-secret-set",
+          "markdownDescription": "Denies the provider_secret_set command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

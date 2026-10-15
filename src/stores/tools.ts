@@ -9,6 +9,7 @@ export const useToolsStore = defineStore('tools', () => {
 
   const categories = ref<Category[]>([
     { id: 'all', label: '全部', icon: 'LayoutGrid' },
+    { id: 'ai', label: 'AI', icon: 'Languages' },
     { id: 'encode', label: '编码转换', icon: 'Binary' },
     { id: 'format', label: '格式化', icon: 'Braces' },
     { id: 'generate', label: '生成器', icon: 'Sparkles' },

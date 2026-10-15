@@ -8,6 +8,7 @@ export interface LocaleMessages {
   noMatch: string
   allCategories: string
   categories: {
+    ai: string
     encode: string
     format: string
     generate: string
@@ -21,17 +22,139 @@ export interface LocaleMessages {
     switchToCn: string
     switchToEn: string
   }
+  settings: {
+    title: string
+    subtitle: string
+    securityTitle: string
+    securityDetail: string
+    desktopSecurityTitle: string
+    desktopSecurityDetail: string
+    newProvider: string
+    name: string
+    namePlaceholder: string
+    baseUrl: string
+    baseUrlPlaceholder: string
+    baseUrlHint: string
+    apiKey: string
+    apiKeyPlaceholder: string
+    enabled: string
+    defaultProvider: string
+    add: string
+    edit: string
+    save: string
+    cancel: string
+    delete: string
+    confirmDelete: string
+    confirmDeleteButton: string
+    models: string
+    modelsEmpty: string
+    modelId: string
+    modelPlaceholder: string
+    addModel: string
+    removeModel: string
+    defaultModel: string
+    empty: string
+    errors: {
+      requiredName: string
+      requiredBaseUrl: string
+      invalidBaseUrl: string
+      requiredApiKey: string
+      secureStorageUnavailable: string
+    }
+  }
+  providerCheck: {
+    title: string
+    quickHint: string
+    deepHint: string
+    modelLabel: string
+    noModels: string
+    quick: string
+    quickLoading: string
+    deep: string
+    deepLoading: string
+    result: {
+      success: string
+      network: string
+      auth: string
+      modelNotFound: string
+    }
+  }
   tools: {
+    'ai-text-ops': string
+    'ai-text-opsDesc': string
     'timestamp-converter': string
     'timestamp-converterDesc': string
     'json-formatter': string
     'json-formatterDesc': string
+    'json-yaml': string
+    'json-yamlDesc': string
     'base64-codec': string
     'base64-codecDesc': string
+    'hash-checksum': string
+    'hash-checksumDesc': string
+    'jwt-verifier': string
+    'jwt-verifierDesc': string
+    'url-codec': string
+    'url-codecDesc': string
     'diffchecker': string
     'diffcheckerDesc': string
     'webp-converter': string
     'webp-converterDesc': string
+    'qr-generator': string
+    'qr-generatorDesc': string
+  }
+  aiTextOps: {
+    setupTitle: string
+    setupDescription: string
+    setupAction: string
+    providerLabel: string
+    modelLabel: string
+    notSelected: string
+    currentSelection: string
+    resultLabel: string
+    inputLabel: string
+    inputPlaceholder: string
+    translate: string
+    translating: string
+    clear: string
+    outputLabel: string
+    outputPlaceholder: string
+    tasks: {
+      translate: string
+      polish: string
+      summarize: string
+      tone: string
+      explain: string
+    }
+    running: {
+      translate: string
+      polish: string
+      summarize: string
+      tone: string
+      explain: string
+    }
+    errors: {
+      empty: string
+      providerInvalid: string
+      network: string
+      auth: string
+      quota: string
+      modelMissing: string
+      timeout: string
+      request: string
+      response: string
+    }
+    cancel: string
+    errorDetails: string
+    hideErrorDetails: string
+    errorStatus: string
+    errorEndpoint: string
+    errorResponseSummary: string
+    retry: string
+    openProviderSettings: string
+    switchProviderOrModel: string
+    closeSwitchProviderOrModel: string
+    retryWithNewProvider: string
   }
   timestamp: {
     label: string
@@ -60,6 +183,19 @@ export interface LocaleMessages {
     output: string
     errParse: string
   }
+  jsonYaml: {
+    inputLabel: string
+    placeholder: string
+    toYaml: string
+    toJson: string
+    copy: string
+    clear: string
+    output: string
+    localNotice: string
+    errParse: string
+    errUnexpected: string
+    lineColumn: string
+  }
   base64Codec: {
     label: string
     placeholder: string
@@ -70,6 +206,74 @@ export interface LocaleMessages {
     output: string
     errEncode: string
     errDecode: string
+  }
+  hashChecksum: {
+    algorithmsLabel: string
+    algorithms: {
+      sha1: string
+      sha256: string
+      sha384: string
+      sha512: string
+      md5: string
+      crc32: string
+    }
+    text: string
+    textPlaceholder: string
+    computeText: string
+    dropHint: string
+    chooseFile: string
+    changeFile: string
+    recompute: string
+    processing: string
+    progress: string
+    results: string
+    empty: string
+    localNotice: string
+    copy: string
+    clear: string
+    errors: {
+      noAlgorithms: string
+      noText: string
+      compute: string
+      fileRead: string
+      copy: string
+    }
+  }
+  urlCodec: {
+    label: string
+    placeholder: string
+    encode: string
+    decode: string
+    copy: string
+    clear: string
+    output: string
+    errEncode: string
+    errDecode: string
+  }
+  jwtVerifier: {
+    tokenLabel: string
+    tokenPlaceholder: string
+    decode: string
+    clear: string
+    keyLabel: string
+    keyPlaceholder: string
+    keyHint: string
+    onlyDecode: string
+    verifying: string
+    verify: string
+    verifyPass: string
+    verifyFail: string
+    unsupported: string
+    invalidKey: string
+    verifyUnexpected: string
+    header: string
+    payload: string
+    localNotice: string
+    errEmpty: string
+    errSegments: string
+    errBase64: string
+    errJson: string
+    errNotObject: string
   }
   diffchecker: {
     labelOld: string
@@ -107,6 +311,21 @@ export interface LocaleMessages {
     errSvgNoSize: string
     errDecode: string
     errEncode: string
+  }
+  qrGenerator: {
+    inputLabel: string
+    inputPlaceholder: string
+    eccLabel: string
+    eccL: string
+    eccM: string
+    eccQ: string
+    eccH: string
+    quietZoneLabel: string
+    quietZoneHint: string
+    sizeLabel: string
+    download: string
+    clear: string
+    empty: string
   }
   [key: string]: any
 }
