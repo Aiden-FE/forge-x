@@ -1,98 +1,250 @@
 <template>
   <ToolLayout :tool="toolMeta">
     <div class="jwt-tool">
-      <div class="panel">
-        <label class="label" for="jwt-token">{{ t('jwtVerifier.tokenLabel') }}</label>
-        <textarea
-          id="jwt-token"
-          v-model="token"
-          class="textarea"
-          data-test="jwt-token"
-          :placeholder="t('jwtVerifier.tokenPlaceholder')"
-          rows="5"
-          spellcheck="false"
-        />
-      </div>
-
-      <div class="actions">
-        <button class="btn primary" data-test="jwt-decode" @click="decode">
-          <Braces :size="16" />
-          {{ t('jwtVerifier.decode') }}
-        </button>
+      <div class="tabs" role="tablist" data-test="jwt-tabs">
         <button
-          class="btn"
-          data-test="jwt-clear"
-          @click="clear"
-        >
-          <Trash2 :size="16" />
-          {{ t('jwtVerifier.clear') }}
-        </button>
-      </div>
-
-      <div class="panel">
-        <label class="label" for="jwt-key">{{ t('jwtVerifier.keyLabel') }}</label>
-        <textarea
-          id="jwt-key"
-          v-model="keyInput"
-          class="textarea compact"
-          data-test="jwt-key"
-          :placeholder="t('jwtVerifier.keyPlaceholder')"
-          rows="5"
-          spellcheck="false"
-        />
-        <p class="hint">{{ t('jwtVerifier.keyHint') }}</p>
-      </div>
-
-      <div class="status-bar" data-test="jwt-status">
-        <span v-if="verificationState === 'decode-only'" class="badge neutral">
-          {{ t('jwtVerifier.onlyDecode') }}
-        </span>
-        <span v-else-if="verificationState === 'verifying'" class="badge neutral">
-          {{ t('jwtVerifier.verifying') }}
-        </span>
-        <span v-else-if="verificationState === 'passed'" class="badge success">
-          {{ t('jwtVerifier.verifyPass') }}
-        </span>
-        <span v-else-if="verificationState === 'failed'" class="badge error">
-          {{ t('jwtVerifier.verifyFail') }}
-        </span>
-        <span v-else-if="verificationState === 'unsupported-alg'" class="badge error">
-          {{ t('jwtVerifier.unsupported') }}
-        </span>
-        <span v-else-if="verificationState === 'invalid-key'" class="badge error">
-          {{ t('jwtVerifier.invalidKey') }}
-        </span>
-        <span v-else-if="verificationState === 'unexpected'" class="badge error">
-          {{ t('jwtVerifier.verifyUnexpected') }}
-        </span>
-
-        <button
-          class="btn primary"
-          data-test="jwt-verify"
-          :disabled="!decodedToken || !keyInput.trim() || verifying"
-          @click="verify"
+          role="tab"
+          class="tab"
+          :class="{ active: activeTab === 'verify' }"
+          :aria-selected="activeTab === 'verify'"
+          data-test="jwt-tab-verify"
+          @click="activeTab = 'verify'"
         >
           <ShieldCheck :size="16" />
-          {{ t('jwtVerifier.verify') }}
+          {{ t('jwtVerifier.generate.tabs.verify') }}
+        </button>
+        <button
+          role="tab"
+          class="tab"
+          :class="{ active: activeTab === 'generate' }"
+          :aria-selected="activeTab === 'generate'"
+          data-test="jwt-tab-generate"
+          @click="activeTab = 'generate'"
+        >
+          <Wand2 :size="16" />
+          {{ t('jwtVerifier.generate.tabs.generate') }}
         </button>
       </div>
 
-      <p v-if="decodeError" class="error" data-test="jwt-error">
-        {{ decodeErrorMessage }}
-      </p>
+      <div v-show="activeTab === 'verify'" role="tabpanel" class="pane">
+        <div class="panel">
+          <label class="label" for="jwt-token">{{ t('jwtVerifier.tokenLabel') }}</label>
+          <textarea
+            id="jwt-token"
+            v-model="token"
+            class="textarea"
+            data-test="jwt-token"
+            :placeholder="t('jwtVerifier.tokenPlaceholder')"
+            rows="5"
+            spellcheck="false"
+          />
+        </div>
 
-      <div v-if="decodedToken" class="results">
-        <section class="panel">
-          <div class="section-header">
-            <h2>{{ t('jwtVerifier.header') }}</h2>
-            <span v-if="tokenAlgorithm" class="algorithm">{{ tokenAlgorithm }}</span>
+        <div class="actions">
+          <button class="btn primary" data-test="jwt-decode" @click="decode">
+            <Braces :size="16" />
+            {{ t('jwtVerifier.decode') }}
+          </button>
+          <button
+            class="btn"
+            data-test="jwt-clear"
+            @click="clear"
+          >
+            <Trash2 :size="16" />
+            {{ t('jwtVerifier.clear') }}
+          </button>
+        </div>
+
+        <div class="panel">
+          <label class="label" for="jwt-key">{{ t('jwtVerifier.keyLabel') }}</label>
+          <textarea
+            id="jwt-key"
+            v-model="keyInput"
+            class="textarea compact"
+            data-test="jwt-key"
+            :placeholder="t('jwtVerifier.keyPlaceholder')"
+            rows="5"
+            spellcheck="false"
+          />
+          <p class="hint">{{ t('jwtVerifier.keyHint') }}</p>
+        </div>
+
+        <div class="status-bar" data-test="jwt-status">
+          <span v-if="verificationState === 'decode-only'" class="badge neutral">
+            {{ t('jwtVerifier.onlyDecode') }}
+          </span>
+          <span v-else-if="verificationState === 'verifying'" class="badge neutral">
+            {{ t('jwtVerifier.verifying') }}
+          </span>
+          <span v-else-if="verificationState === 'passed'" class="badge success">
+            {{ t('jwtVerifier.verifyPass') }}
+          </span>
+          <span v-else-if="verificationState === 'failed'" class="badge error">
+            {{ t('jwtVerifier.verifyFail') }}
+          </span>
+          <span v-else-if="verificationState === 'unsupported-alg'" class="badge error">
+            {{ t('jwtVerifier.unsupported') }}
+          </span>
+          <span v-else-if="verificationState === 'invalid-key'" class="badge error">
+            {{ t('jwtVerifier.invalidKey') }}
+          </span>
+          <span v-else-if="verificationState === 'unexpected'" class="badge error">
+            {{ t('jwtVerifier.verifyUnexpected') }}
+          </span>
+
+          <button
+            class="btn primary"
+            data-test="jwt-verify"
+            :disabled="!decodedToken || !keyInput.trim() || verifying"
+            @click="verify"
+          >
+            <ShieldCheck :size="16" />
+            {{ t('jwtVerifier.verify') }}
+          </button>
+        </div>
+
+        <p v-if="decodeError" class="error" data-test="jwt-error">
+          {{ decodeErrorMessage }}
+        </p>
+
+        <div v-if="decodedToken" class="results">
+          <section class="panel">
+            <div class="section-header">
+              <h2>{{ t('jwtVerifier.header') }}</h2>
+              <span v-if="tokenAlgorithm" class="algorithm">{{ tokenAlgorithm }}</span>
+            </div>
+            <pre class="json" data-test="jwt-header">{{ headerJson }}</pre>
+          </section>
+          <section class="panel">
+            <h2>{{ t('jwtVerifier.payload') }}</h2>
+            <pre class="json" data-test="jwt-payload">{{ payloadJson }}</pre>
+          </section>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'generate'" role="tabpanel" class="pane">
+        <div class="panel">
+          <label class="label" for="jwt-gen-header">{{ t('jwtVerifier.generate.headerLabel') }}</label>
+          <textarea
+            id="jwt-gen-header"
+            v-model="store.headerText"
+            class="textarea compact"
+            data-test="jwt-gen-header"
+            rows="4"
+            spellcheck="false"
+          />
+          <p v-if="!headerParse.ok" class="error" data-test="jwt-gen-header-error">
+            {{ t(headerParse.reason === 'json' ? 'jwtVerifier.generate.errors.headerJson' : 'jwtVerifier.generate.errors.headerObject') }}
+          </p>
+          <p class="hint">{{ t('jwtVerifier.generate.headerHint') }}</p>
+        </div>
+
+        <div class="panel">
+          <label class="label" for="jwt-gen-payload">{{ t('jwtVerifier.generate.payloadLabel') }}</label>
+          <textarea
+            id="jwt-gen-payload"
+            v-model="store.payloadText"
+            class="textarea compact"
+            data-test="jwt-gen-payload"
+            :placeholder="t('jwtVerifier.generate.payloadPlaceholder')"
+            rows="7"
+            spellcheck="false"
+          />
+          <p v-if="!payloadParse.ok" class="error" data-test="jwt-gen-payload-error">
+            {{ t(payloadParse.reason === 'json' ? 'jwtVerifier.generate.errors.payloadJson' : 'jwtVerifier.generate.errors.payloadObject') }}
+          </p>
+          <div class="time-helpers" data-test="jwt-gen-time-helpers">
+            <span class="label">
+              <Clock :size="14" />
+              {{ t('jwtVerifier.generate.timeLabel') }}
+            </span>
+            <span class="claim">iat</span>
+            <button
+              class="btn small"
+              data-test="jwt-gen-iat-now"
+              :disabled="!payloadParse.ok"
+              @click="applyTimePreset('iat', 'now')"
+            >
+              {{ t('jwtVerifier.generate.now') }}
+            </button>
+            <span class="claim">exp</span>
+            <button
+              class="btn small"
+              data-test="jwt-gen-exp-now"
+              :disabled="!payloadParse.ok"
+              @click="applyTimePreset('exp', 'now')"
+            >
+              {{ t('jwtVerifier.generate.now') }}
+            </button>
+            <button
+              class="btn small"
+              data-test="jwt-gen-exp-1h"
+              :disabled="!payloadParse.ok"
+              @click="applyTimePreset('exp', 'plus-1h')"
+            >
+              {{ t('jwtVerifier.generate.plus1h') }}
+            </button>
+            <button
+              class="btn small"
+              data-test="jwt-gen-exp-24h"
+              :disabled="!payloadParse.ok"
+              @click="applyTimePreset('exp', 'plus-24h')"
+            >
+              {{ t('jwtVerifier.generate.plus24h') }}
+            </button>
           </div>
-          <pre class="json" data-test="jwt-header">{{ headerJson }}</pre>
-        </section>
-        <section class="panel">
-          <h2>{{ t('jwtVerifier.payload') }}</h2>
-          <pre class="json" data-test="jwt-payload">{{ payloadJson }}</pre>
-        </section>
+        </div>
+
+        <div class="panel">
+          <label class="label" for="jwt-gen-secret">{{ t('jwtVerifier.generate.secretLabel') }}</label>
+          <input
+            id="jwt-gen-secret"
+            v-model="store.secret"
+            class="input"
+            type="password"
+            autocomplete="off"
+            data-test="jwt-gen-secret"
+            :placeholder="t('jwtVerifier.generate.secretPlaceholder')"
+            spellcheck="false"
+          />
+          <p class="hint warning" data-test="jwt-gen-secret-warning">
+            <ShieldAlert :size="14" />
+            {{ t('jwtVerifier.generate.secretWarning') }}
+          </p>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" data-test="jwt-gen-run" :disabled="!canGenerate || generating" @click="generate">
+            <Sparkles :size="16" />
+            {{ t('jwtVerifier.generate.run') }}
+          </button>
+          <button class="btn" data-test="jwt-gen-clear" @click="resetGenerate">
+            <Trash2 :size="16" />
+            {{ t('jwtVerifier.generate.clear') }}
+          </button>
+        </div>
+
+        <p v-if="generateError" class="error" data-test="jwt-gen-error">
+          {{ generateErrorMessage }}
+        </p>
+
+        <div v-if="store.token" class="panel">
+          <label class="label" for="jwt-gen-token">{{ t('jwtVerifier.generate.tokenLabel') }}</label>
+          <pre id="jwt-gen-token" class="json" data-test="jwt-gen-token">{{ store.token }}</pre>
+          <div class="actions">
+            <button class="btn" data-test="jwt-gen-copy" @click="copyToken">
+              <Check v-if="copied" :size="16" />
+              <Copy v-else :size="16" />
+              {{ copied ? t('jwtVerifier.generate.copied') : t('jwtVerifier.generate.copy') }}
+            </button>
+            <button class="btn primary" data-test="jwt-gen-send" @click="sendToVerify">
+              <ArrowRightLeft :size="16" />
+              {{ t('jwtVerifier.generate.sendToVerify') }}
+            </button>
+          </div>
+        </div>
+
+        <p class="hint">{{ t('jwtVerifier.generate.hint') }}</p>
       </div>
 
       <p class="notice">
@@ -104,13 +256,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { Braces, Lock, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { computed, nextTick, ref, watch } from 'vue'
+import {
+  ArrowRightLeft,
+  Braces,
+  Check,
+  Clock,
+  Copy,
+  Lock,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Wand2,
+} from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
-import { decodeJwt, verifyJwt } from './jwt'
-import type { JwtDecodeErrorCode, JwtDecodeResult } from './jwt'
+import { applyJwtTimePreset, decodeJwt, generateJwt, parseJwtJsonObject, verifyJwt } from './jwt'
+import type {
+  JwtDecodeErrorCode,
+  JwtDecodeResult,
+  JwtGenerateErrorCode,
+  JwtTimeClaim,
+  JwtTimePreset,
+} from './jwt'
+import { useJwtGenerateStore } from './generateStore'
 import JwtVerifier from './JwtVerifier.vue'
 
 type VerificationState =
@@ -123,22 +294,30 @@ type VerificationState =
   | 'invalid-key'
   | 'unexpected'
 
+type ToolTab = 'verify' | 'generate'
+
 const toolMeta: ToolMeta = {
   id: 'jwt-verifier',
   name: 'JWT 解码/验签',
-  description: '本地解码 JWT 并使用 HS256、RS256、ES256 验签',
+  description: '本地解码 JWT 并使用 HS256、RS256、ES256 验签，支持 HS256 本地生成',
   category: 'encode',
   icon: 'ShieldCheck',
   component: JwtVerifier,
-  keywords: ['jwt', 'token', 'decode', 'verify', 'hs256', 'rs256', 'es256', '验签']
+  keywords: ['jwt', 'token', 'decode', 'verify', 'generate', 'hs256', 'rs256', 'es256', '验签', '生成']
 }
 
 const { t } = useI18n()
+const store = useJwtGenerateStore()
+const activeTab = ref<ToolTab>('verify')
 const token = ref('')
 const keyInput = ref('')
 const decodeResult = ref<JwtDecodeResult | null>(null)
 const verifying = ref(false)
 const verification = ref<{ ok: true; valid: boolean } | { ok: false; reason: 'unsupported-alg' | 'invalid-key' | 'unexpected' } | null>(null)
+const generating = ref(false)
+const generateError = ref<JwtGenerateErrorCode | null>(null)
+const copied = ref(false)
+let copyResetTimer: ReturnType<typeof setTimeout> | undefined
 
 const decodedToken = computed(() => (decodeResult.value?.ok ? decodeResult.value : null))
 const headerJson = computed(() => (decodedToken.value ? JSON.stringify(decodedToken.value.header, null, 2) : ''))
@@ -167,6 +346,19 @@ const decodeErrorMessages: Record<JwtDecodeErrorCode, string> = {
   'not-object': 'jwtVerifier.errNotObject',
 }
 const decodeErrorMessage = computed(() => t(decodeErrorMessages[decodeError.value as JwtDecodeErrorCode] ?? 'jwtVerifier.errJson'))
+
+// 生成视图：header/payload 实时语法校验（非法即错误态、不产出）。
+const headerParse = computed(() => parseJwtJsonObject(store.headerText))
+const payloadParse = computed(() => parseJwtJsonObject(store.payloadText))
+const canGenerate = computed(() => headerParse.value.ok && payloadParse.value.ok && store.secret.trim().length > 0)
+const generateErrorMessages: Record<JwtGenerateErrorCode, string> = {
+  'empty-secret': 'jwtVerifier.generate.errors.secret',
+  'header-json': 'jwtVerifier.generate.errors.headerJson',
+  'header-not-object': 'jwtVerifier.generate.errors.headerObject',
+  'payload-json': 'jwtVerifier.generate.errors.payloadJson',
+  'payload-not-object': 'jwtVerifier.generate.errors.payloadObject',
+}
+const generateErrorMessage = computed(() => (generateError.value ? t(generateErrorMessages[generateError.value]) : ''))
 
 watch(token, () => {
   decodeResult.value = null
@@ -207,10 +399,119 @@ function clear() {
   decodeResult.value = null
   verification.value = null
 }
+
+// exp/iat 时间快捷：时钟取当下，写入 Unix 秒（CONTEXT.md：时间值以 Unix 秒计）。
+function applyTimePreset(claim: JwtTimeClaim, preset: JwtTimePreset) {
+  const parsed = payloadParse.value
+  if (!parsed.ok) return
+
+  generateError.value = null
+  store.payloadText = JSON.stringify(
+    applyJwtTimePreset(parsed.value, claim, preset, Date.now()),
+    null,
+    2,
+  )
+}
+
+async function generate() {
+  if (!canGenerate.value || generating.value) return
+
+  generating.value = true
+  try {
+    const result = await generateJwt({
+      headerText: store.headerText,
+      payloadText: store.payloadText,
+      secret: store.secret,
+    })
+    if (result.ok) {
+      store.token = result.token
+      generateError.value = null
+    } else {
+      store.token = ''
+      generateError.value = result.reason
+    }
+  } catch {
+    // WebCrypto 签名在合法输入下不会失败；防御性兜底：不产出结果。
+    store.token = ''
+  } finally {
+    generating.value = false
+  }
+}
+
+function resetGenerate() {
+  store.reset()
+  generateError.value = null
+  copied.value = false
+  if (copyResetTimer !== undefined) clearTimeout(copyResetTimer)
+}
+
+async function copyToken() {
+  if (!store.token) return
+  try {
+    await navigator.clipboard.writeText(store.token)
+    copied.value = true
+    if (copyResetTimer !== undefined) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => {
+      copied.value = false
+    }, 1500)
+  } catch {
+    // Clipboard unavailable (e.g. unsupported context) — silently ignore.
+  }
+}
+
+// 生成 → 验签闭环：把生成的 token 与同一 secret 送入验签视图并自动验签。
+async function sendToVerify() {
+  const generated = store.token
+  const secret = store.secret.trim()
+  if (!generated || !secret) return
+
+  keyInput.value = secret
+  token.value = generated
+  activeTab.value = 'verify'
+  // 等待既有 watcher 复位旧的解码/验签结果后再触发，避免被异步复位覆盖。
+  await nextTick()
+  decode()
+  await verify()
+}
 </script>
 
 <style scoped>
 .jwt-tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+.pane {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
@@ -246,6 +547,7 @@ function clear() {
 }
 
 .textarea,
+.input,
 .json {
   margin: 0;
   background: var(--bg-surface);
@@ -276,6 +578,20 @@ function clear() {
   color: var(--text-quaternary);
 }
 
+.input {
+  padding: var(--space-sm) var(--space-md);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+  border-color: var(--border-focus);
+}
+
+.input::placeholder {
+  color: var(--text-quaternary);
+}
+
 .json {
   padding: var(--space-md);
   overflow: auto;
@@ -284,7 +600,8 @@ function clear() {
 }
 
 .actions,
-.status-bar {
+.status-bar,
+.time-helpers {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -293,6 +610,21 @@ function clear() {
 
 .status-bar {
   justify-content: space-between;
+}
+
+.time-helpers .label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.claim {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .btn {
@@ -307,6 +639,11 @@ function clear() {
   font-size: 13px;
   cursor: pointer;
   transition: all var(--transition-fast);
+}
+
+.btn.small {
+  padding: 4px var(--space-sm);
+  font-size: 12px;
 }
 
 .btn:hover:not(:disabled) {
@@ -356,6 +693,13 @@ function clear() {
   margin: 0;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+.hint.warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--error);
 }
 
 .notice {

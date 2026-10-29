@@ -29,6 +29,9 @@ importers:
       js-yaml:
         specifier: ^5.4.3
         version: 5.4.3
+      jsonpath-plus:
+        specifier: ^11.2.2
+        version: 11.2.2
       jszip:
         specifier: ^3.10.1
         version: 3.10.2
@@ -130,6 +133,18 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@jsep-plugin/assignment@1.4.0':
+    resolution: {integrity: sha512-nw2Px23Eirx0PFTVoPrb3FEq9Wkmg6vxcDtt38MtBCf1G0tjLCB9cK+3seOXyiw+6+aalgYhvJabQbWwMVKlEQ==}
+    engines: {node: '>= 10.16.0'}
+    peerDependencies:
+      jsep: ^0.4.0||^1.0.0
+
+  '@jsep-plugin/regex@1.1.0':
+    resolution: {integrity: sha512-2Vkbda+XRjK6VTI6Lrh0sNBuMT8mZ51EhqMvO+V2rSdmqjs7NAGssxPZfkL23EFzYfSrvxyd1ZjOdqPQMM50og==}
+    engines: {node: '>= 10.16.0'}
+    peerDependencies:
+      jsep: ^0.4.0||^1.0.0
 
   '@jsquash/webp@1.5.0':
     resolution: {integrity: sha512-KggLoj2MnRSfIqTeKe1EmbljTX2vuV7mh79k89PCL1pyqiDULcPM1L47twxXt0hkb68F70bXiL31MxsuoZtKFw==}
@@ -561,6 +576,15 @@ packages:
     resolution: {integrity: sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw==}
     hasBin: true
 
+  jsep@1.6.0:
+    resolution: {integrity: sha512-Y8Tr54CX7B5YGAwo7/n8eumidEX3Opx98RyyQVnlHqUaZcPA8uUzL2v1rshr9ypW9Q6hNjfJtg3sL+8kaNE7TA==}
+    engines: {node: '>= 20.16.0'}
+
+  jsonpath-plus@11.2.2:
+    resolution: {integrity: sha512-VqZkA0qPIKKg3KIJV8PICqPkBsIrJXG2HXrWmVzkZpSdCKSzNvqqM241QmZ/86Vh7QuxHjOsuWi/9Gk7D6LKOA==}
+    engines: {node: '>=22.0.0'}
+    hasBin: true
+
   jszip@3.10.2:
     resolution: {integrity: sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==}
 
@@ -951,6 +975,14 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
+  '@jsep-plugin/assignment@1.4.0(jsep@1.6.0)':
+    dependencies:
+      jsep: 1.6.0
+
+  '@jsep-plugin/regex@1.1.0(jsep@1.6.0)':
+    dependencies:
+      jsep: 1.6.0
+
   '@jsquash/webp@1.5.0':
     dependencies:
       wasm-feature-detect: 1.9.0
@@ -1316,6 +1348,14 @@ snapshots:
   js-yaml@5.4.3:
     dependencies:
       argparse: 2.0.1
+
+  jsep@1.6.0: {}
+
+  jsonpath-plus@11.2.2:
+    dependencies:
+      '@jsep-plugin/assignment': 1.4.0(jsep@1.6.0)
+      '@jsep-plugin/regex': 1.1.0(jsep@1.6.0)
+      jsep: 1.6.0
 
   jszip@3.10.2:
     dependencies:

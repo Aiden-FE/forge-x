@@ -11,6 +11,36 @@ export type JwtVerifyErrorCode =
   | 'invalid-key'
   | 'verification-error'
 
+export type JwtGenerateErrorCode =
+  | 'empty-secret'
+  | 'header-json'
+  | 'header-not-object'
+  | 'payload-json'
+  | 'payload-not-object'
+
+export type JwtGenerateResult =
+  | {
+      ok: true
+      token: string
+      header: Record<string, unknown>
+      payload: Record<string, unknown>
+    }
+  | {
+      ok: false
+      reason: JwtGenerateErrorCode
+    }
+
+export type JwtGenerateInput = {
+  headerText: string
+  payloadText: string
+  secret: string
+}
+
+/** exp/iat 时间快捷的预设（CONTEXT.md：时间值以 Unix 秒计）。 */
+export type JwtTimePreset = 'now' | 'plus-1h' | 'plus-24h'
+
+export type JwtTimeClaim = 'exp' | 'iat'
+
 export type JwtDecodeResult =
   | {
       ok: true
@@ -66,6 +96,22 @@ function decodeBase64Url(segment: string): Uint8Array | null {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export type JwtJsonObjectParseResult =
+  | { ok: true; value: Record<string, unknown> }
+  | { ok: false; reason: 'json' | 'not-object' }
+
+/** 解析生成视图的 header/payload 文本：非法 JSON 与非 JSON 对象是两种结构化错误。 */
+export function parseJwtJsonObject(text: string): JwtJsonObjectParseResult {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text) as unknown
+  } catch {
+    return { ok: false, reason: 'json' }
+  }
+  if (!isJsonObject(parsed)) return { ok: false, reason: 'not-object' }
+  return { ok: true, value: parsed }
 }
 
 export function decodeJwt(token: string): JwtDecodeResult {
@@ -315,4 +361,79 @@ export function ecdsaJwtSignatureToWebCrypto(derSignature: Uint8Array): Uint8Arr
   raw.set(r.bytes, 32 - r.bytes.length)
   raw.set(s.bytes, 32 + (32 - s.bytes.length))
   return raw
+}
+
+const TIME_PRESET_OFFSET_SECONDS: Record<JwtTimePreset, number> = {
+  now: 0,
+  'plus-1h': 3600,
+  'plus-24h': 86400,
+}
+
+/** 时间快捷换算：时钟由调用方注入（nowMs），返回 Unix 秒并截断到秒。 */
+export function jwtPresetUnixSeconds(preset: JwtTimePreset, nowMs: number): number {
+  return Math.floor(nowMs / 1000) + TIME_PRESET_OFFSET_SECONDS[preset]
+}
+
+/** 将 exp/iat 快捷值写入 payload claims：纯函数，claim 不存在时新增。 */
+export function applyJwtTimePreset(
+  payload: Record<string, unknown>,
+  claim: JwtTimeClaim,
+  preset: JwtTimePreset,
+  nowMs: number,
+): Record<string, unknown> {
+  return { ...payload, [claim]: jwtPresetUnixSeconds(preset, nowMs) }
+}
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+async function signJwtWithHs256(signingInput: string, secret: string): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const signature = await crypto.subtle.sign(
+    { name: 'HMAC', hash: 'SHA-256' },
+    key,
+    new TextEncoder().encode(signingInput),
+  )
+  return new Uint8Array(signature)
+}
+
+/**
+ * 生成视图的 HS256 本地签名（E2 扩展）：header / payload 均为 JSON 对象文本，
+ * secret 为 UTF-8 文本，仅存于调用方内存。签名始终使用 HS256（WebCrypto
+ * crypto.subtle），非对称算法不在范围内。
+ */
+export async function generateJwt(input: JwtGenerateInput): Promise<JwtGenerateResult> {
+  const secret = input.secret.trim()
+  if (!secret) return { ok: false, reason: 'empty-secret' }
+
+  const header = parseJwtJsonObject(input.headerText)
+  if (!header.ok) {
+    return { ok: false, reason: header.reason === 'json' ? 'header-json' : 'header-not-object' }
+  }
+
+  const payload = parseJwtJsonObject(input.payloadText)
+  if (!payload.ok) {
+    return { ok: false, reason: payload.reason === 'json' ? 'payload-json' : 'payload-not-object' }
+  }
+
+  const headerSegment = encodeBase64Url(new TextEncoder().encode(JSON.stringify(header.value)))
+  const payloadSegment = encodeBase64Url(new TextEncoder().encode(JSON.stringify(payload.value)))
+  const signingInput = `${headerSegment}.${payloadSegment}`
+  const signature = await signJwtWithHs256(signingInput, secret)
+
+  return {
+    ok: true,
+    token: `${signingInput}.${encodeBase64Url(signature)}`,
+    header: header.value,
+    payload: payload.value,
+  }
 }

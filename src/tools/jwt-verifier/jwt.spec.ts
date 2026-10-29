@@ -1,8 +1,14 @@
+/// <reference types="node" />
+import { createHmac } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
+  applyJwtTimePreset,
   decodeJwt,
   ecdsaJwtSignatureToWebCrypto,
   ecdsaWebCryptoSignatureToJwt,
+  generateJwt,
+  jwtPresetUnixSeconds,
+  parseJwtJsonObject,
   verifyJwt,
 } from './jwt'
 
@@ -222,5 +228,131 @@ describe('verifyJwt', () => {
   it('不支持的算法返回 unsupported-alg', async () => {
     const token = createJwt({ alg: 'HS512' }, payload, new Uint8Array(64))
     await expect(verifyJwt(token, 'secret')).resolves.toEqual({ ok: false, reason: 'unsupported-alg' })
+  })
+})
+
+function decodeBase64UrlToJson(segment: string): unknown {
+  const padded = segment.replace(/-/g, '+').replace(/_/g, '/')
+  const binary = atob(padded)
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+  return JSON.parse(new TextDecoder().decode(bytes))
+}
+
+describe('parseJwtJsonObject', () => {
+  it('解析 JSON 对象', () => {
+    expect(parseJwtJsonObject('{"a":1}')).toEqual({ ok: true, value: { a: 1 } })
+  })
+
+  it('非法 JSON 返回 json', () => {
+    expect(parseJwtJsonObject('{')).toEqual({ ok: false, reason: 'json' })
+  })
+
+  it('非对象返回 not-object', () => {
+    expect(parseJwtJsonObject('[1,2]')).toEqual({ ok: false, reason: 'not-object' })
+    expect(parseJwtJsonObject('"user"')).toEqual({ ok: false, reason: 'not-object' })
+  })
+})
+
+describe('jwtPresetUnixSeconds / applyJwtTimePreset', () => {
+  const nowMs = 1_700_000_000_500
+
+  it('注入时钟后快捷值按 Unix 秒计算（截断到秒）', () => {
+    expect(jwtPresetUnixSeconds('now', nowMs)).toBe(1_700_000_000)
+    expect(jwtPresetUnixSeconds('plus-1h', nowMs)).toBe(1_700_000_000 + 3600)
+    expect(jwtPresetUnixSeconds('plus-24h', nowMs)).toBe(1_700_000_000 + 86_400)
+  })
+
+  it('exp/iat 快捷写入 payload：纯函数、值来自注入时钟、claim 不存在时新增', () => {
+    const base = { sub: 'user-1' }
+    const withIat = applyJwtTimePreset(base, 'iat', 'now', nowMs)
+    expect(withIat).toEqual({ sub: 'user-1', iat: 1_700_000_000 })
+    const withExp = applyJwtTimePreset(withIat, 'exp', 'plus-24h', nowMs)
+    expect(withExp).toEqual({ sub: 'user-1', iat: 1_700_000_000, exp: 1_700_000_000 + 86_400 })
+    expect(base).toEqual({ sub: 'user-1' })
+    expect(withIat).not.toBe(base)
+  })
+})
+
+describe('generateJwt', () => {
+  const headerText = '{"alg":"HS256","typ":"JWT"}'
+  const payloadText = '{"sub":"user-1","exp":4102444800,"role":["admin"]}'
+  const secret = 'generate-secret'
+
+  async function generateOk(header: string, payload: string, secretInput: string) {
+    const result = await generateJwt({ headerText: header, payloadText: payload, secret: secretInput })
+    if (!result.ok) throw new Error(`expected ok, got ${result.reason}`)
+    return result
+  }
+
+  it('HS256 签名与 node:crypto createHmac 独立真值一致', async () => {
+    const result = await generateOk(headerText, payloadText, secret)
+    const [headerSegment, payloadSegment, signatureSegment] = result.token.split('.')
+    const signingInput = `${headerSegment}.${payloadSegment}`
+    const expected = createHmac('sha256', secret)
+      .update(signingInput)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    expect(signatureSegment).toBe(expected)
+  })
+
+  it('生成 token 为三段式，header/payload 为无 padding 的 base64url 且编码正确', async () => {
+    const result = await generateOk(headerText, payloadText, secret)
+    const segments = result.token.split('.')
+    expect(segments).toHaveLength(3)
+    for (const segment of segments) {
+      expect(segment).not.toMatch(/[=+/]/)
+    }
+    expect(decodeBase64UrlToJson(segments[0]!)).toEqual({ alg: 'HS256', typ: 'JWT' })
+    expect(decodeBase64UrlToJson(segments[1]!)).toEqual(JSON.parse(payloadText))
+    expect(result.header).toEqual({ alg: 'HS256', typ: 'JWT' })
+    expect(result.payload).toEqual(JSON.parse(payloadText))
+  })
+
+  it('同 secret 可被 verifyJwt 闭环验签通过，错误 secret 验签失败', async () => {
+    const result = await generateOk(headerText, payloadText, secret)
+    await expect(verifyJwt(result.token, secret)).resolves.toEqual({ ok: true, valid: true })
+    await expect(verifyJwt(result.token, 'wrong-secret')).resolves.toEqual({ ok: true, valid: false })
+  })
+
+  it('exp/iat 快捷产生的 claims 按输入序列化进 token', async () => {
+    const nowMs = 1_700_000_000_000
+    const payload = applyJwtTimePreset(
+      applyJwtTimePreset({ sub: 'user-1' }, 'iat', 'now', nowMs),
+      'exp',
+      'plus-1h',
+      nowMs,
+    )
+    const result = await generateOk(headerText, JSON.stringify(payload), secret)
+    expect(decodeBase64UrlToJson(result.token.split('.')[1]!)).toEqual({
+      sub: 'user-1',
+      iat: 1_700_000_000,
+      exp: 1_700_000_000 + 3600,
+    })
+  })
+
+  it('非法 payload JSON 返回 payload-json 且不产出 token', async () => {
+    const result = await generateJwt({ headerText, payloadText: '{"sub":', secret })
+    expect(result).toEqual({ ok: false, reason: 'payload-json' })
+  })
+
+  it('payload 非 JSON 对象（数组/字符串）返回 payload-not-object', async () => {
+    await expect(generateJwt({ headerText, payloadText: '[1,2]', secret }))
+      .resolves.toEqual({ ok: false, reason: 'payload-not-object' })
+    await expect(generateJwt({ headerText, payloadText: '"user"', secret }))
+      .resolves.toEqual({ ok: false, reason: 'payload-not-object' })
+  })
+
+  it('非法 header JSON 返回 header-json，header 非对象返回 header-not-object', async () => {
+    await expect(generateJwt({ headerText: '{', payloadText, secret }))
+      .resolves.toEqual({ ok: false, reason: 'header-json' })
+    await expect(generateJwt({ headerText: '[]', payloadText, secret }))
+      .resolves.toEqual({ ok: false, reason: 'header-not-object' })
+  })
+
+  it('空 secret 返回 empty-secret', async () => {
+    await expect(generateJwt({ headerText, payloadText, secret: '   ' }))
+      .resolves.toEqual({ ok: false, reason: 'empty-secret' })
   })
 })
