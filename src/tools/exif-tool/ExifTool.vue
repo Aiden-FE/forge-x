@@ -222,7 +222,7 @@
 
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, reactive, ref } from 'vue'
-import JSZip from 'jszip'
+import type JSZipType from 'jszip'
 import {
   AlertTriangle,
   Archive,
@@ -464,6 +464,7 @@ function downloadRow(row: Row) {
 }
 
 async function downloadAll() {
+  const JSZip = (await import('jszip')).default as typeof JSZipType
   const zip = new JSZip()
   for (const row of rows.value) {
     if (row.status === 'cleaned' && row.blob && row.outputName) zip.file(row.outputName, row.blob)

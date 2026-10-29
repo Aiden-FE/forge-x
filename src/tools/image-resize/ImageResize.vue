@@ -296,7 +296,7 @@
 
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, reactive, ref } from 'vue'
-import JSZip from 'jszip'
+import type JSZipType from 'jszip'
 import {
   AlertTriangle,
   Archive,
@@ -633,6 +633,7 @@ async function downloadAll() {
   // zip 前条目构造（纯函数）：仅收集成功产物，名称为加入批次时确定的输出名
   const entries = collectZipEntries(rows.value)
   if (entries.length === 0) return
+  const JSZip = (await import('jszip')).default as typeof JSZipType
   const zip = new JSZip()
   for (const entry of entries) zip.file(entry.name, entry.blob)
   triggerDownload(await zip.generateAsync({ type: 'blob' }), zipFileName())

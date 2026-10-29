@@ -139,4 +139,25 @@ describe('convertImage 编排：decode → resize → encode', () => {
     expect(outcome.firstFrame).toBe(false)
     expect(outcome.blob).toBeInstanceOf(Blob)
   })
+
+  // 票据 15 验收 #5 的 node 可测锚点：「产物重新解析 = 0 条元数据」依赖产物必为重编码
+  // 产物——元数据只有经原文件字节透传才能存活。编排层不存在透传路径：输出 blob 恒为
+  // encode 的返回值（与输入字节无关），原文件元数据因此无法进入产物。
+  // （像素级 exifr 复检属浏览器运行时行为，与 webp-converter 同不在 node 覆盖内。）
+  it('产物必为重编码输出：blob 来自 encode，与原文件字节不同（元数据不透传）', async () => {
+    const originalBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+    const file = new File([originalBytes], 'with-exif.png', { type: 'image/png' })
+    const reencoded = new Blob([new Uint8Array([9, 9, 9])], { type: 'image/png' })
+    const codec = makeCodec({
+      encode: async (_s, w, h, format, q) => {
+        codec.calls.push(`encode:${format}:${w}x${h}:q=${q === null ? 'none' : q}`)
+        return reencoded
+      },
+    })
+    const outcome = await convertImage(codec, file, { mode: 'percentage', percent: 50 }, 'png', 80)
+    expect(codec.calls).toEqual(['decode', 'encode:png:2000x1500:q=none'])
+    expect(outcome.blob).toBe(reencoded)
+    const outputBytes = new Uint8Array(await outcome.blob.arrayBuffer())
+    expect(Array.from(outputBytes)).not.toEqual(Array.from(originalBytes))
+  })
 })
