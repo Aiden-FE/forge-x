@@ -13,6 +13,8 @@ export interface LocaleMessages {
     format: string
     generate: string
     convert: string
+    text: string
+    debug: string
   }
   theme: {
     toggleDark: string
@@ -328,4 +330,15 @@ export interface LocaleMessages {
     empty: string
   }
   [key: string]: any
+}
+
+// Message value shape: a leaf string or a nested node of strings.
+export type MessageNode = string | { [key: string]: MessageNode }
+
+// Per-tool locale fragment merged into the global messages at load time
+// (see src/composables/useI18n.ts). Keys mirror the global convention:
+// `tools.<id>` / `tools.<id>Desc` plus a `<toolCamel>` section for UI strings.
+export interface ToolLocaleFragment {
+  'zh-CN'?: Record<string, MessageNode>
+  en?: Record<string, MessageNode>
 }

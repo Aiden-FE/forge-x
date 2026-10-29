@@ -14,6 +14,8 @@ export const useToolsStore = defineStore('tools', () => {
     { id: 'format', label: '格式化', icon: 'Braces' },
     { id: 'generate', label: '生成器', icon: 'Sparkles' },
     { id: 'convert', label: '转换', icon: 'ArrowLeftRight' },
+    { id: 'text', label: '文本处理', icon: 'Type' },
+    { id: 'debug', label: '调试测试', icon: 'Bug' },
   ])
 
   const filteredTools = computed(() => {

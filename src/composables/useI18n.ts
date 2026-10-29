@@ -1,6 +1,6 @@
 import { useLocaleStore } from '@/stores/locale'
 import { storeToRefs } from 'pinia'
-import type { LocaleMessages } from '@/locales/types'
+import type { LocaleMessages, MessageNode, ToolLocaleFragment } from '@/locales/types'
 import zhCN from '@/locales/zh-CN'
 import en from '@/locales/en'
 
@@ -9,6 +9,37 @@ type Locale = 'zh-CN' | 'en'
 const messages: Record<Locale, LocaleMessages> = {
   'zh-CN': zhCN,
   'en': en,
+}
+
+// Per-tool fragments (src/locales/tools/<id>.ts) are deep-merged over the base
+// messages so each tool owns its strings without touching shared locale files.
+const toolFragments = import.meta.glob<{ default: ToolLocaleFragment }>(
+  '../locales/tools/*.ts',
+  { eager: true },
+)
+
+function isMessageNode(value: unknown): value is Record<string, MessageNode> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function mergeFragment(base: Record<string, MessageNode>, fragment: Record<string, MessageNode>): void {
+  for (const key of Object.keys(fragment)) {
+    const incoming = fragment[key]
+    const existing = base[key]
+    if (isMessageNode(incoming) && isMessageNode(existing)) {
+      mergeFragment(existing, incoming)
+    } else {
+      base[key] = incoming
+    }
+  }
+}
+
+for (const path in toolFragments) {
+  const fragment = toolFragments[path].default
+  for (const locale of ['zh-CN', 'en'] as const) {
+    const part = fragment[locale]
+    if (part) mergeFragment(messages[locale] as Record<string, MessageNode>, part)
+  }
 }
 
 /**

@@ -15,6 +15,8 @@ const en: LocaleMessages = {
     format: 'Formatter',
     generate: 'Generator',
     convert: 'Convert',
+    text: 'Text',
+    debug: 'Debug & Test',
   },
   theme: {
     toggleDark: 'Switch to dark theme',

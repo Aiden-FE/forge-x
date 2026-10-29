@@ -15,6 +15,8 @@ const zhCN: LocaleMessages = {
     format: '格式化',
     generate: '生成器',
     convert: '转换',
+    text: '文本处理',
+    debug: '调试测试',
   },
   theme: {
     toggleDark: '切换暗色主题',
