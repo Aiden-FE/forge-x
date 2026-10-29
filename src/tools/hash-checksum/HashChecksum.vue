@@ -13,11 +13,36 @@
         />
       </div>
 
+      <div class="panel">
+        <label class="label" for="hash-hmac-key">{{ t('hashChecksum.hmac.keyLabel') }}</label>
+        <input
+          id="hash-hmac-key"
+          v-model="hmacKey"
+          type="text"
+          class="key-input"
+          data-test="hash-hmac-key"
+          :placeholder="t('hashChecksum.hmac.keyPlaceholder')"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p class="hint" data-test="hash-hmac-hint">{{ t('hashChecksum.hmac.keyHint') }}</p>
+      </div>
+
       <div class="algorithm-group" data-test="hash-algorithms">
         <span class="label">{{ t('hashChecksum.algorithmsLabel') }}</span>
         <div class="algorithm-list">
-          <label v-for="id in HASH_ALGORITHM_IDS" :key="id" class="algorithm">
-            <input v-model="selectedAlgorithms" type="checkbox" :value="id" />
+          <label
+            v-for="id in HASH_ALGORITHM_IDS"
+            :key="id"
+            class="algorithm"
+            :class="{ disabled: isHmacActive && !isHmacCapable(id) }"
+          >
+            <input
+              v-model="selectedAlgorithms"
+              type="checkbox"
+              :value="id"
+              :disabled="isHmacActive && !isHmacCapable(id)"
+            />
             <span>{{ t(`hashChecksum.algorithms.${id}`) }}</span>
           </label>
         </div>
@@ -136,6 +161,7 @@ import {
   computeFileHashes,
   computeTextHashes,
   HASH_ALGORITHM_IDS,
+  HMAC_ALGORITHM_IDS,
   type HashAlgorithmId,
 } from './hashing'
 import HashChecksum from './HashChecksum.vue'
@@ -145,14 +171,15 @@ const { t } = useI18n()
 const toolMeta: ToolMeta = {
   id: 'hash-checksum',
   name: '哈希/校验和',
-  description: '本地计算文本与文件的 SHA、MD5 和 CRC32',
+  description: '本地计算文本与文件的 SHA、MD5 和 CRC32，文本模式支持 HMAC',
   category: 'encode',
   icon: 'Hash',
   component: HashChecksum,
-  keywords: ['hash', 'sha', 'sha1', 'sha256', 'sha384', 'sha512', 'md5', 'crc32', 'checksum', '哈希', '校验和'],
+  keywords: ['hash', 'sha', 'sha1', 'sha256', 'sha384', 'sha512', 'md5', 'crc32', 'checksum', 'hmac', 'hmac-sha1', 'hmac-sha256', 'hmac-sha384', 'hmac-sha512', '哈希', '校验和', '密钥'],
 }
 
 const textInput = ref('')
+const hmacKey = ref('')
 const selectedAlgorithms = ref<HashAlgorithmId[]>([...HASH_ALGORITHM_IDS])
 const textResults = ref<Partial<Record<HashAlgorithmId, string>> | null>(null)
 const fileResults = ref<Partial<Record<HashAlgorithmId, string>> | null>(null)
@@ -171,6 +198,13 @@ let copiedTimer: number | undefined
 
 const progressPercent = computed(() => Math.min(100, Math.max(0, Math.round(progress.value))))
 const progressLabel = computed(() => t('hashChecksum.progress', { percent: String(progressPercent.value) }))
+
+// HMAC 与普通哈希共用同一结果区：密钥为空即普通哈希，填入即 HMAC，无模式开关。
+const isHmacActive = computed(() => hmacKey.value.length > 0)
+
+function isHmacCapable(id: HashAlgorithmId): boolean {
+  return HMAC_ALGORITHM_IDS.includes(id)
+}
 
 const visibleResults = computed(() => {
   const results = fileResults.value ?? textResults.value
@@ -201,8 +235,13 @@ async function copyResult(id: HashAlgorithmId, value?: string) {
 }
 
 async function computeText() {
-  if (selectedAlgorithms.value.length === 0) {
-    setError(t('hashChecksum.errors.noAlgorithms'))
+  const algorithms = isHmacActive.value
+    ? selectedAlgorithms.value.filter(isHmacCapable)
+    : selectedAlgorithms.value
+  if (algorithms.length === 0) {
+    setError(t(isHmacActive.value
+      ? 'hashChecksum.hmac.errors.noCapableAlgorithm'
+      : 'hashChecksum.errors.noAlgorithms'))
     return
   }
   if (textInput.value.length === 0) {
@@ -216,7 +255,7 @@ async function computeText() {
   textResults.value = null
   fileResults.value = null
   try {
-    const result = await computeTextHashes(textInput.value, selectedAlgorithms.value)
+    const result = await computeTextHashes(textInput.value, algorithms, { hmacKey: hmacKey.value })
     if (job === textJob) textResults.value = result
   } catch {
     if (job === textJob) setError(t('hashChecksum.errors.compute'))
@@ -229,6 +268,7 @@ function clearText() {
   textJob += 1
   textBusy.value = false
   textInput.value = ''
+  hmacKey.value = ''
   textResults.value = null
   setError('')
 }
@@ -329,6 +369,37 @@ function clearFile() {
 
 .textarea::placeholder {
   color: var(--text-quaternary);
+}
+
+.key-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-sm) var(--space-md);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.key-input:focus {
+  border-color: var(--border-focus);
+}
+
+.key-input::placeholder {
+  color: var(--text-quaternary);
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-quaternary);
+  font-size: 12px;
+}
+
+.algorithm.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .algorithm-group {

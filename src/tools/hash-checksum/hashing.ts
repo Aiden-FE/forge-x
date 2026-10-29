@@ -9,6 +9,18 @@ export const HASH_ALGORITHM_IDS = [
   'crc32',
 ] as const satisfies readonly HashAlgorithmId[]
 
+/** 支持 HMAC 的算法子集：SHA 系列（WebCrypto crypto.subtle 原生）。 */
+export type HmacAlgorithmId = Extract<HashAlgorithmId, 'sha1' | 'sha256' | 'sha384' | 'sha512'>
+
+export const HMAC_ALGORITHM_IDS: readonly HashAlgorithmId[] = ['sha1', 'sha256', 'sha384', 'sha512']
+
+/** MD5 / CRC32 为自实现增量摘要，不适用 HMAC。 */
+function isHmacAlgorithm(id: HashAlgorithmId): id is HmacAlgorithmId {
+  return id === 'sha1' || id === 'sha256' || id === 'sha384' || id === 'sha512'
+}
+
+type SubtleHashAlgorithm = 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512'
+
 type IncrementalDigest = {
   update(data: Uint8Array): void
   digest(): Promise<string>
@@ -16,6 +28,32 @@ type IncrementalDigest = {
 
 type SubtleCryptoLike = {
   digest(algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer>
+}
+
+type SubtleHmacLike = {
+  importKey(
+    format: 'raw',
+    keyData: BufferSource,
+    algorithm: { name: 'HMAC'; hash: SubtleHashAlgorithm },
+    extractable: boolean,
+    keyUsages: readonly string[],
+  ): Promise<unknown>
+  sign(
+    algorithm: { name: 'HMAC'; hash: SubtleHashAlgorithm },
+    key: unknown,
+    data: BufferSource,
+  ): Promise<ArrayBuffer>
+}
+
+export class HmacUnsupportedAlgorithmError extends Error {
+  readonly code = 'hmac-unsupported-algorithm'
+  readonly unsupported: readonly HashAlgorithmId[]
+
+  constructor(unsupported: readonly HashAlgorithmId[]) {
+    super(`HMAC is not supported for algorithms: ${unsupported.join(', ')}`)
+    this.name = 'HmacUnsupportedAlgorithmError'
+    this.unsupported = [...unsupported]
+  }
 }
 
 function toHex(value: ArrayBuffer | Uint8Array): string {
@@ -40,11 +78,11 @@ function concatBytes(chunks: readonly Uint8Array[], totalLength: number): Uint8A
 class WebCryptoDigest implements IncrementalDigest {
   private readonly chunks: Uint8Array[] = []
   private byteLength = 0
-  private readonly algorithm: 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512'
+  private readonly algorithm: SubtleHashAlgorithm
   private readonly subtle: SubtleCryptoLike
 
   constructor(
-    algorithm: 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512',
+    algorithm: SubtleHashAlgorithm,
     subtle: SubtleCryptoLike,
   ) {
     this.algorithm = algorithm
@@ -259,20 +297,68 @@ async function digestStates(
   return Object.fromEntries(entries) as Record<HashAlgorithmId, string>
 }
 
+const SUBTLE_HASH_BY_ALGORITHM: Record<HmacAlgorithmId, SubtleHashAlgorithm> = {
+  sha1: 'SHA-1',
+  sha256: 'SHA-256',
+  sha384: 'SHA-384',
+  sha512: 'SHA-512',
+}
+
+async function computeHmacBytes(
+  bytes: Uint8Array,
+  algorithms: readonly HmacAlgorithmId[],
+  keyText: string,
+  subtle: SubtleHmacLike = crypto.subtle,
+): Promise<Record<HashAlgorithmId, string>> {
+  const keyBytes = new TextEncoder().encode(keyText)
+  const entries = await Promise.all(
+    algorithms.map(async (id) => {
+      const algorithm = { name: 'HMAC' as const, hash: SUBTLE_HASH_BY_ALGORITHM[id] }
+      const key = await subtle.importKey('raw', keyBytes, algorithm, false, ['sign'])
+      const signature = await subtle.sign(algorithm, key, bytes as Uint8Array<ArrayBuffer>)
+      return [id, toHex(signature)] as const
+    }),
+  )
+  return Object.fromEntries(entries) as Record<HashAlgorithmId, string>
+}
+
+export type TextHashOptions = {
+  /**
+   * HMAC 密钥（UTF-8 文本）。非空时对请求中的 SHA 系列算法计算 HMAC
+   * （MD5 / CRC32 抛出 HmacUnsupportedAlgorithmError）；为空或缺省时
+   * 保持普通哈希语义（现状不变）。
+   */
+  hmacKey?: string
+}
+
 export async function computeTextHashes(
   text: string,
   algorithms: readonly HashAlgorithmId[],
+  options: TextHashOptions = {},
 ): Promise<Record<HashAlgorithmId, string>> {
   const ids = assertAlgorithms(algorithms)
   const bytes = new TextEncoder().encode(text)
-  return computeBytesHashes(bytes, ids)
+  return computeBytesHashes(bytes, ids, options)
 }
 
 export async function computeBytesHashes(
   bytes: Uint8Array,
   algorithms: readonly HashAlgorithmId[],
+  options: TextHashOptions = {},
 ): Promise<Record<HashAlgorithmId, string>> {
   const ids = assertAlgorithms(algorithms)
+  const hmacKey = options.hmacKey ?? ''
+  if (hmacKey.length > 0) {
+    const hmacIds: HmacAlgorithmId[] = []
+    const unsupported: HashAlgorithmId[] = []
+    for (const id of ids) {
+      if (isHmacAlgorithm(id)) hmacIds.push(id)
+      else unsupported.push(id)
+    }
+    if (unsupported.length > 0) throw new HmacUnsupportedAlgorithmError(unsupported)
+    return computeHmacBytes(bytes, hmacIds, hmacKey)
+  }
+
   const states = new Map(ids.map(id => [id, createDigest(id)]))
   for (const state of states.values()) state.update(bytes)
   return digestStates(states)

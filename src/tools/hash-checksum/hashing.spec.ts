@@ -3,6 +3,8 @@ import {
   computeBytesHashes,
   computeFileHashes,
   computeTextHashes,
+  HMAC_ALGORITHM_IDS,
+  HmacUnsupportedAlgorithmError,
   readBlobChunks,
   type HashAlgorithmId,
 } from './hashing'
@@ -160,5 +162,71 @@ describe('computeFileHashes 分块流式计算', () => {
     )
 
     expect(result).toEqual(CHECK_VECTORS)
+  })
+})
+
+// RFC 4231 向量真值经 OpenSSL（node:crypto createHmac）独立交叉验证。
+const RFC4231_TC1_KEY = '\u000b'.repeat(20) // U+000B 在 UTF-8 中编码为单字节 0x0b，等价于 0x0b × 20 的二进制密钥
+const RFC4231_TC1_VECTORS = {
+  sha1: 'b617318655057264e28bc0b6fb378c8ef146be00',
+  sha256: 'b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7',
+  sha384: 'afd03944d84895626b0825f4ab46907f15f9dadbe4101ec682aa034c7cebc59cfaea9ea9076ede7f4af152e8b2fa9cb6',
+  sha512: '87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cdedaa833b7d6b8a702038b274eaea3f4e4be9d914eeb61f1702e696c203a126854',
+} satisfies Partial<Record<HashAlgorithmId, string>>
+
+const RFC4231_TC2_KEY = 'Jefe'
+const RFC4231_TC2_VECTORS = {
+  sha1: 'effcdf6ae5eb2fa2d27416d5f184df9c259a7c79',
+  sha256: '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843',
+  sha384: 'af45d2e376484031617f78d2b58a6b1b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649',
+  sha512: '164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737',
+} satisfies Partial<Record<HashAlgorithmId, string>>
+
+describe('computeTextHashes HMAC（RFC 4231 测试向量）', () => {
+  it('RFC 4231 Test Case 1（key = 0x0b×20）四算法向量', async () => {
+    await expect(computeTextHashes('Hi There', HMAC_ALGORITHM_IDS, { hmacKey: RFC4231_TC1_KEY }))
+      .resolves.toEqual(RFC4231_TC1_VECTORS)
+  })
+
+  it('RFC 4231 Test Case 2（key = Jefe）四算法向量', async () => {
+    await expect(
+      computeTextHashes('what do ya want for nothing?', HMAC_ALGORITHM_IDS, { hmacKey: RFC4231_TC2_KEY }),
+    ).resolves.toEqual(RFC4231_TC2_VECTORS)
+  })
+
+  it('已知值：HMAC-SHA256(key, "The quick brown fox…")', async () => {
+    const result = await computeTextHashes('The quick brown fox jumps over the lazy dog', ['sha256'], {
+      hmacKey: 'key',
+    })
+    expect(result.sha256).toBe('f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8')
+  })
+
+  it('多字节 UTF-8 密钥按 UTF-8 字节参与计算', async () => {
+    const result = await computeTextHashes('abc', ['sha256'], { hmacKey: '密钥' })
+    expect(result.sha256).toBe('03064ffd2da3671dc0e9d491a88fe31ab52ae0905e789b9b46475fce3e1011c6')
+  })
+
+  it('空密钥回落为普通哈希（回归锚）', async () => {
+    await expect(computeTextHashes('abc', ALL_ALGORITHMS, { hmacKey: '' })).resolves.toEqual(ABC_VECTORS)
+    await expect(computeTextHashes('abc', ALL_ALGORITHMS, { hmacKey: '' }))
+      .resolves.toEqual(await computeTextHashes('abc', ALL_ALGORITHMS))
+  })
+
+  it('MD5 / CRC32 与密钥组合返回结构化不支持错误', async () => {
+    const error: unknown = await computeTextHashes('abc', ['md5', 'crc32'], { hmacKey: 'k' }).then(
+      () => null,
+      (caught: unknown) => caught,
+    )
+    expect(error).toBeInstanceOf(HmacUnsupportedAlgorithmError)
+    expect((error as HmacUnsupportedAlgorithmError).code).toBe('hmac-unsupported-algorithm')
+    expect((error as HmacUnsupportedAlgorithmError).unsupported).toEqual(['md5', 'crc32'])
+    await expect(computeTextHashes('abc', ['sha256', 'md5'], { hmacKey: 'k' }))
+      .rejects.toThrow(HmacUnsupportedAlgorithmError)
+  })
+
+  it('computeBytesHashes 共享同一密钥语义', async () => {
+    const bytes = new TextEncoder().encode('what do ya want for nothing?')
+    await expect(computeBytesHashes(bytes, ['sha256'], { hmacKey: RFC4231_TC2_KEY }))
+      .resolves.toEqual({ sha256: RFC4231_TC2_VECTORS.sha256 })
   })
 })
