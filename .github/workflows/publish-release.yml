@@ -73,9 +73,14 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/release-artifacts.mjs verify release "$TAG" "$COMMIT" "$TAG_OBJECT" "$CANDIDATE_RUN_ID"
-          verify_run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$COMMIT&status=completed&per_page=100" \
-            --jq '[.workflow_runs[] | select(.path == ".github/workflows/verify-candidate.yml" and .conclusion == "success")][0].id')
-          test -n "$verify_run_id" || { echo '::error::no successful Verify candidate run for tagged commit'; exit 1; }
+          # Verify candidate is a workflow_dispatch run (head_sha = dispatched
+          # ref), so it cannot be filtered by the tagged commit here. The latest
+          # successful run is downloaded and its candidate-verification.json is
+          # validated against this candidate's manifest below; a run for another
+          # candidate fails the identity check and blocks publication.
+          verify_run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/verify-candidate.yml" and .conclusion == "success" and .event == "workflow_dispatch")][0].id // empty')
+          test -n "$verify_run_id" || { echo '::error::no successful Verify candidate run found; dispatch Verify candidate for this tag first'; exit 1; }
           echo "VERIFY_RUN_ID=$verify_run_id" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
