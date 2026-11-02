@@ -52,8 +52,9 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.event' | grep -Fxq push
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.head_branch' | grep -Fxq "$TAG"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.head_sha' | grep -Fxq "$commit"
-          git checkout --detach "$commit"
-          node scripts/check-version.mjs --require-tag "$TAG"
+          # Version files must be read at the tagged commit, not at this workflow's ref.
+          git worktree add --detach "$RUNNER_TEMP/tagsrc" "$commit"
+          (cd "$RUNNER_TEMP/tagsrc" && node scripts/check-version.mjs --require-tag "$TAG")
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "tag_object=$tag_object" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -100,8 +101,10 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Tooling scripts come from the default branch; the tagged commit stays
+        # reachable for the lease tree (full history is fetched) and is bound
+        # via CLI args and the candidate manifest, not this checkout.
         with:
-          ref: ${{ needs.preflight.outputs.commit }}
           fetch-depth: 0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -156,7 +159,8 @@ jobs:
           git ls-remote --tags origin "refs/tags/$TAG" | cut -f1 | grep -Fxq "$TAG_OBJECT"
           test "$(git rev-parse "refs/tags/$TAG")" = "$TAG_OBJECT"
           test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$COMMIT"
-          node scripts/check-version.mjs --require-tag "$TAG"
+          git worktree add --detach "$RUNNER_TEMP/tagsrc" "$COMMIT"
+          (cd "$RUNNER_TEMP/tagsrc" && node scripts/check-version.mjs --require-tag "$TAG")
           node scripts/release-artifacts.mjs verify release "$TAG" "$COMMIT" "$TAG_OBJECT" "$CANDIDATE_RUN_ID"
           node scripts/candidate-verification.mjs validate candidate-verification/candidate-verification.json release/candidate-manifest.json
       - name: Publish exact verified installers and checksums
