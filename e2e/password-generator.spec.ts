@@ -6,9 +6,6 @@ async function openTool(page: import('@playwright/test').Page) {
 }
 
 test.describe('密码生成器 e2e', () => {
-  // 复制走真实剪贴板：headless 下授予写权限以稳定出现「已复制」UI 态
-  test.use({ permissions: ['clipboard-write'] })
-
   test('进入生成 1 个 20 位四类齐全；调策略不实时，重生成后按新策略且异于旧值', async ({ page }) => {
     await openTool(page)
     const rows = page.locator('[data-test="pw-row"] code')
@@ -63,7 +60,9 @@ test.describe('密码生成器 e2e', () => {
     expect(updated).not.toBe(initial)
     expect(updated).toMatch(/^[^0OoIl1]{20}$/)
 
-    // 复制单行 → 按钮短暂进入「已复制/Copied」态（不读剪贴板内容）
+    // 复制单行 → 按钮短暂进入「已复制/Copied」态（不读剪贴板内容）。
+    // clipboard-write 权限 WebKit 不支持（Unknown permission），仅 chromium 验证此 UI 态。
+    test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.click('[data-test="pw-copy-0"]')
     await expect(page.locator('[data-test="pw-copy-0"]')).toHaveText(/已复制|Copied/)
   })

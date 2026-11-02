@@ -9,8 +9,6 @@ import { test, expect } from '@playwright/test'
 // - 高亮 2 处 mark，交替底色类 alt-a / alt-b；
 // - 替换模板 `$2 $1` → `world hello bar foo`（g 全部替换）。
 test.use({ locale: 'zh-CN' })
-// 仅断言「已复制」UI 状态（不读剪贴板真实内容）
-test.use({ permissions: ['clipboard-write'] })
 
 async function openTool(page: import('@playwright/test').Page) {
   await page.goto('/#/tool/regex-tester')
@@ -52,7 +50,9 @@ test.describe('Regex Tester e2e', () => {
     await expect(row1.locator('.group-chip').nth(0)).toContainText('foo')
     await expect(row1.locator('.group-chip').nth(1)).toContainText('bar')
 
-    // 复制该匹配 JSON：仅断言「已复制」UI 状态
+    // 复制该匹配 JSON：仅断言「已复制」UI 状态。
+    // clipboard-write 权限 WebKit 不支持（Unknown permission），仅 chromium 验证此 UI 态。
+    test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.click('[data-test="copy-match-0"]')
     await expect(page.locator('[data-test="copy-match-0"]')).toContainText('已复制')
 
@@ -84,6 +84,9 @@ test.describe('Regex Tester e2e', () => {
   })
 
   test('ReDoS 样例 1.5s 超时终止，页面保持可交互（票据验收 #4）', async ({ page }) => {
+    // 灾难性回溯的耗时特征依赖正则引擎实现：V8 上 (a+)+$ 对 35 个 a 指数爆炸，
+    // WebKit（JSC/Yarr）会快速完成、正确地不触发超时。超时逻辑本身由注入时钟的单测覆盖。
+    test.skip(test.info().project.name !== 'chromium', '回溯耗时特征为 V8 特有，仅 chromium 验证')
     await openTool(page)
 
     // (a+)+$ 对 35 个 a + b 灾难性回溯：主线程 1.5s terminate 兜底

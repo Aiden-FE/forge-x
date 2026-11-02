@@ -14,8 +14,6 @@ import { test, expect } from '@playwright/test'
 //
 // UI 默认语言跟随 Playwright context locale，这里固定 zh-CN 保证文案断言确定。
 test.use({ locale: 'zh-CN' })
-// 仅断言「已复制」UI 状态（不读剪贴板真实内容），需授予写权限避免文案走「复制失败」分支。
-test.use({ permissions: ['clipboard-write'] })
 
 async function openTool(page: import('@playwright/test').Page) {
   await page.goto('/#/tool/text-case')
@@ -79,7 +77,9 @@ test.describe('Text Case e2e', () => {
     const output = page.locator('[data-test="text-case-output"]')
     await expect(output).toHaveValue('httpServer')
 
-    // 仅断言「已复制」UI 状态，不读剪贴板内容
+    // 仅断言「已复制」UI 状态，不读剪贴板内容。
+    // clipboard-write 权限 WebKit 不支持（Unknown permission），仅 chromium 验证此 UI 态。
+    test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.click('[data-test="text-case-copy"]')
     await expect(page.locator('[data-test="text-case-copy"]')).toContainText('已复制')
 
