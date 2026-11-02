@@ -60,8 +60,17 @@ function readFragments(dir) {
     if (!entry.endsWith('.json')) continue
     const fragment = JSON.parse(readFileSync(join(dir, entry), 'utf8'))
     for (const [id, item] of Object.entries(fragment)) {
-      if (merged[id]) throw new Error(`duplicate check across fragments: ${id}`)
-      merged[id] = item
+      const existing = merged[id]
+      if (existing && (existing.status !== 'SKIP' || item.status !== 'SKIP')) {
+        throw new Error(`duplicate non-SKIP check across fragments: ${id}`)
+      }
+      if (existing) {
+        // Both platforms may SKIP the same policy row (e.g. unsigned install
+        // prompts on Windows and macOS); merge the reasons.
+        existing.reason = [existing.reason, item.reason].filter(Boolean).join(' | ')
+      } else {
+        merged[id] = item
+      }
     }
   }
   return merged
