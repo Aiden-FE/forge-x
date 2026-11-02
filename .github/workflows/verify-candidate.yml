@@ -186,8 +186,8 @@ jobs:
           kill "$app_pid"
           wait "$app_pid" 2>/dev/null || true
 
-          mkdir -p verification
-          cat > verification/macos.json <<'EOF'
+          mkdir -p "$GITHUB_WORKSPACE/verification"
+          cat > "$GITHUB_WORKSPACE/verification/macos.json" <<'EOF'
           {
             "macos_apple_silicon_first_open_offline_tools": {
               "status": "PASS",
