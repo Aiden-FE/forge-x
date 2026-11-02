@@ -194,15 +194,18 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          if [ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .draft)" != true ]; then
+          # `releases/tags/{tag}` does not return drafts; find the release in the
+          # list endpoint instead. Only one release per tag can exist.
+          selector="[.[] | select(.tag_name == \"$TAG\")][0]"
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq "$selector.draft")" != true ]; then
             echo '::error::release is not a draft'; exit 1
           fi
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' | sort > published.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq "$selector.assets[].name" | sort > published.txt
           printf '%s\n' "ForgeX_${version}_universal.dmg" "ForgeX_${version}_x64-setup.exe" SHA256SUMS | sort > expected.txt
           diff -u expected.txt published.txt
-          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq "$selector.id")
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -f draft=false >/dev/null
-          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .draft)" = false
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq "$selector.draft")" = false
       - name: Release publication lease
         if: always() && env.PUBLICATION_LEASE_ACQUIRED == 'true'
         shell: bash
