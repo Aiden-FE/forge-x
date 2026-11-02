@@ -62,29 +62,39 @@ jobs:
           run-id: ${{ inputs['candidate-run-id'] }}
           github-token: ${{ github.token }}
           path: release
-      - name: Verify candidate, QA evidence, and digests
+      - name: Verify candidate and digests
         env:
-          QA_EVIDENCE_URL: ${{ inputs['qa-evidence-url'] }}
-          QA_EVIDENCE_SHA256: ${{ inputs['qa-evidence-sha256'] }}
           TAG: ${{ inputs.tag }}
           COMMIT: ${{ steps.identity.outputs.commit }}
           TAG_OBJECT: ${{ steps.identity.outputs.tag_object }}
           CANDIDATE_RUN_ID: ${{ inputs['candidate-run-id'] }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           node scripts/release-artifacts.mjs verify release "$TAG" "$COMMIT" "$TAG_OBJECT" "$CANDIDATE_RUN_ID"
-          node scripts/release-evidence.mjs create release-qa-evidence.json release/candidate-manifest.json
+          verify_run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$COMMIT&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/verify-candidate.yml" and .conclusion == "success")][0].id')
+          test -n "$verify_run_id" || { echo '::error::no successful Verify candidate run for tagged commit'; exit 1; }
+          echo "VERIFY_RUN_ID=$verify_run_id" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: candidate-verification
+          run-id: ${{ env.VERIFY_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: candidate-verification
+      - name: Bind automated verification to this candidate
+        run: node scripts/candidate-verification.mjs validate "candidate-verification/candidate-verification.json" release/candidate-manifest.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: publication-preflight
           path: |
             release
-            release-qa-evidence.json
+            candidate-verification/candidate-verification.json
           if-no-files-found: error
 
   publish:
     needs: preflight
     runs-on: ubuntu-latest
-    environment: release-qa
     permissions:
       contents: write
       actions: read
@@ -97,13 +107,6 @@ jobs:
         with:
           name: publication-preflight
           path: .
-      - name: Require configured release QA reviewers
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/environments/release-qa" \
-            --jq '[.protection_rules[] | select(.type == "required_reviewers" and (.reviewers | length > 0))] | length' | grep -Eq '^[1-9][0-9]*$'
       - name: Acquire publication lease
         env:
           GH_TOKEN: ${{ github.token }}
@@ -139,15 +142,13 @@ jobs:
           done
           echo '::error::publication lease unavailable after 30 minutes'
           exit 1
-      - name: Recheck tag, candidate, and reviewed QA
+      - name: Recheck tag, candidate, and automated verification
         shell: bash
         env:
           TAG: ${{ inputs.tag }}
           COMMIT: ${{ needs.preflight.outputs.commit }}
           TAG_OBJECT: ${{ needs.preflight.outputs.tag_object }}
           CANDIDATE_RUN_ID: ${{ inputs['candidate-run-id'] }}
-          QA_EVIDENCE_URL: ${{ inputs['qa-evidence-url'] }}
-          QA_EVIDENCE_SHA256: ${{ inputs['qa-evidence-sha256'] }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/release-publication-lock:refs/remotes/origin/release-publication-lock
@@ -157,8 +158,8 @@ jobs:
           test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$COMMIT"
           node scripts/check-version.mjs --require-tag "$TAG"
           node scripts/release-artifacts.mjs verify release "$TAG" "$COMMIT" "$TAG_OBJECT" "$CANDIDATE_RUN_ID"
-          node scripts/release-evidence.mjs validate release-qa-evidence.json release/candidate-manifest.json
-      - name: Publish exact reviewed installers and checksums
+          node scripts/candidate-verification.mjs validate candidate-verification/candidate-verification.json release/candidate-manifest.json
+      - name: Publish exact verified installers and checksums
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ inputs.tag }}

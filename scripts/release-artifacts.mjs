@@ -17,8 +17,13 @@ function prefix(file, size) {
 }
 
 const actual = readdirSync(directory).sort()
-const expected = mode === 'create' ? names.slice().sort() : [...names, 'candidate-manifest.json', 'SHA256SUMS', 'qa-evidence.template.json'].sort()
-if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`artifact set mismatch; expected ${expected}, got ${actual}`)
+const required = [...names, 'candidate-manifest.json', 'SHA256SUMS'].sort()
+// Candidates built before automated verification carry the human-QA template;
+// it is ignored here so existing candidate artifacts still verify.
+const legacyExtras = new Set(['qa-evidence.template.json'])
+const unknown = actual.filter((name) => !required.includes(name) && !legacyExtras.has(name))
+if (unknown.length > 0) throw new Error(`unexpected files in artifact set: ${unknown.join(', ')}`)
+if (required.some((name) => !actual.includes(name))) throw new Error(`artifact set mismatch; expected ${required}, got ${actual}`)
 for (const name of names) {
   const path = join(directory, name)
   if (!statSync(path).isFile() || statSync(path).size < 1024) throw new Error(`invalid artifact ${name}`)

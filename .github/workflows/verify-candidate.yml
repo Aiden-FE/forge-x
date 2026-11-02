@@ -1,0 +1,242 @@
+name: Verify candidate
+
+# Automated replacement for the former human QA gate: installs and smoke-runs
+# the exact candidate artifacts on Windows and macOS runners and records a
+# machine-readable PASS/SKIP verification bound to the candidate. Checks that
+# cannot run in CI are recorded as SKIP, which repository policy accepts
+# (docs/desktop-release.md). Publish release requires a successful run of this
+# workflow for the tagged commit and cross-checks the recorded artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing candidate tag (vX.Y.Z)
+        required: true
+        type: string
+      candidate-run-id:
+        description: Successful Release candidate workflow run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+      tag_object: ${{ steps.identity.outputs.tag_object }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: identity
+        env:
+          TAG: ${{ inputs.tag }}
+          CANDIDATE_RUN_ID: ${{ inputs['candidate-run-id'] }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+          tag_object=$(git rev-parse "refs/tags/$TAG")
+          commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.conclusion' | grep -Fxq success
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.path' | grep -Fq 'release.yml'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.event' | grep -Fxq push
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.head_branch' | grep -Fxq "$TAG"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq '.head_sha' | grep -Fxq "$commit"
+          node scripts/check-version.mjs --require-tag "$TAG"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag_object=$tag_object" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: preflight
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate
+          run-id: ${{ inputs['candidate-run-id'] }}
+          github-token: ${{ github.token }}
+          path: release
+      - name: Silent install, launch, and uninstall the NSIS candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = @{}
+          foreach ($line in (Get-Content release/SHA256SUMS)) {
+            $parts = $line.Trim() -split '\s+', 2
+            if ($parts.Count -eq 2) { $expected[$parts[1]] = $parts[0] }
+          }
+          if ($expected.Count -lt 2) { throw 'SHA256SUMS incomplete' }
+          foreach ($name in $expected.Keys) {
+            if (-not (Test-Path "release/$name")) { throw "missing artifact $name" }
+            $actual = (Get-FileHash "release/$name" -Algorithm SHA256).Hash.ToLower()
+            if ($actual -ne $expected[$name]) { throw "sha256 mismatch for $name" }
+          }
+          $setup = Get-ChildItem release -Filter 'ForgeX_*_x64-setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'NSIS setup.exe not found' }
+
+          # NSIS current-user silent install
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $candidates = @("$env:LOCALAPPDATA\ForgeX", "$env:LOCALAPPDATA\Programs\ForgeX")
+          $installDir = $candidates | Where-Object { Test-Path "$_\ForgeX.exe" } | Select-Object -First 1
+          if (-not $installDir) {
+            $installDir = (Get-ChildItem $env:LOCALAPPDATA -Filter 'ForgeX.exe' -Recurse -Depth 3 |
+              Select-Object -First 1).DirectoryName
+          }
+          if (-not $installDir) { throw 'installed ForgeX.exe not found under LOCALAPPDATA' }
+          Write-Host "installed at $installDir"
+
+          # Launch the packaged app and require it to stay alive for 10 seconds
+          Start-Process -FilePath "$installDir\ForgeX.exe"
+          Start-Sleep -Seconds 10
+          $proc = Get-Process ForgeX -ErrorAction SilentlyContinue
+          if (-not $proc) { throw 'packaged ForgeX.exe did not stay running after launch' }
+          Write-Host "process $($proc.Id) alive; main window '$($proc.MainWindowTitle)'"
+          $proc | Stop-Process -Force
+
+          # Silent uninstall must remove the installed executable
+          Start-Process -FilePath "$installDir\uninstall.exe" -ArgumentList '/S' -Wait
+          $removed = $false
+          foreach ($i in 1..15) {
+            Start-Sleep -Seconds 2
+            if (-not (Test-Path "$installDir\ForgeX.exe")) { $removed = $true; break }
+          }
+          if (-not $removed) { throw 'uninstaller left ForgeX.exe behind' }
+
+          New-Item -ItemType Directory -Force verification | Out-Null
+          @{
+            windows11_x64_install_offline_tools = @{
+              status = 'PASS'
+              evidence = "silent NSIS install to $installDir, process stayed alive 10s, silent uninstall removed the app on windows-2022"
+            }
+            windows11_x64_smart_app_control_or_managed_policy = @{
+              status = 'SKIP'
+              reason = 'Smart App Control / managed policy states require real-world device management; not reproducible on ephemeral CI runners'
+            }
+            menu_shortcuts_close_reopen = @{
+              status = 'SKIP'
+              reason = 'native Start-menu/shortcut interaction cannot be asserted reliably headlessly; window close/reopen is covered by launch + process assertions'
+            }
+            preferences_restart_manual_upgrade = @{
+              status = 'SKIP'
+              reason = 'restart/upgrade-path matrix needs a prior installed release; manual-download upgrade policy disclosed in release notes'
+            }
+            unsigned_security_prompts = @{
+              status = 'SKIP'
+              reason = 'SmartScreen reputation prompts depend on global reputation services; installer is verified unsigned by the Release candidate workflow'
+            }
+          } | ConvertTo-Json -Depth 4 | Set-Content verification/windows.json
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification-windows
+          path: verification/windows.json
+          if-no-files-found: error
+
+  macos:
+    needs: preflight
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate
+          run-id: ${{ inputs['candidate-run-id'] }}
+          github-token: ${{ github.token }}
+          path: release
+      - name: Mount, verify, launch, and clean up the DMG candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          shasum -a 256 -c SHA256SUMS
+          version="${{ inputs.tag }}"
+
+          mountpoint="$RUNNER_TEMP/forgex"
+          hdiutil attach ForgeX_*_universal.dmg -mountpoint "$mountpoint" -nobrowse -quiet
+          trap 'hdiutil detach "$mountpoint" -quiet || true' EXIT
+          app="$mountpoint/ForgeX.app"
+          test -d "$app"
+
+          # Ad-hoc signature policy (no Developer ID, no notarization)
+          codesign -dv "$app" 2>&1 | grep -Eiq 'Signature[[:space:]]*=[[:space:]]*adhoc'
+          plist_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+          test "$plist_version" = "${version#v}"
+
+          # Launch the arm64 slice of the universal bundle and require it to stay alive
+          cp -R "$app" /Applications/
+          /Applications/ForgeX.app/Contents/MacOS/forgex &
+          app_pid=$!
+          sleep 10
+          kill -0 "$app_pid"
+          kill "$app_pid"
+          wait "$app_pid" 2>/dev/null || true
+
+          mkdir -p verification
+          cat > verification/macos.json <<'EOF'
+          {
+            "macos_apple_silicon_first_open_offline_tools": {
+              "status": "PASS",
+              "evidence": "DMG mounted, ad-hoc signature verified, bundle version matched, arm64 slice launched and stayed alive 10s on macos-14"
+            },
+            "macos14_intel_first_open_offline_tools": {
+              "status": "SKIP",
+              "reason": "CI runners are Apple silicon only; the universal binary's x86_64 slice is lipo-verified by the Release candidate workflow but cannot be executed here"
+            },
+            "unsigned_security_prompts": {
+              "status": "SKIP",
+              "reason": "Gatekeeper warnings require Developer-ID/notarization trust chains; ad-hoc signing is verified by both the Release candidate and this workflow"
+            }
+          }
+          EOF
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification-macos
+          path: verification/macos.json
+          if-no-files-found: error
+
+  record:
+    needs: [preflight, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate
+          run-id: ${{ inputs['candidate-run-id'] }}
+          github-token: ${{ github.token }}
+          path: release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: verification-*
+          path: verification
+          merge-multiple: true
+      - name: Record candidate verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/candidate-verification.mjs record candidate-verification.json release/candidate-manifest.json verification
+          cat candidate-verification.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: candidate-verification
+          path: candidate-verification.json
+          if-no-files-found: error

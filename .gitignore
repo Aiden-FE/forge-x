@@ -29,3 +29,4 @@ src-tauri/target/
 
 .pi-subagents
 .scratch
+dist-candidate/
