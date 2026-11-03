@@ -9,7 +9,7 @@
  */
 
 import { formatHex, formatHsl, formatRgb, hslToRgb, rgbToHsl } from './color'
-import type { HslColor, RgbColor } from './color'
+import type { RgbColor } from './color'
 
 export type PaletteRuleId =
   | 'complementary'
@@ -82,12 +82,4 @@ export function swatchTooltip(color: RgbColor): string {
   return `${paletteHex(color)} · ${formatRgb(color)} · ${formatHsl(color)}`
 }
 
-/** 悬停展示的结构化形态（供测试与未来 UI 复用）。 */
-export function swatchInfo(color: RgbColor): { hex: string; rgb: string; hsl: string } {
-  return { hex: paletteHex(color), rgb: formatRgb(color), hsl: formatHsl(color) }
-}
 
-/** HSL 结构化取值（供角度断言）。 */
-export function hslOf(color: RgbColor): HslColor {
-  return rgbToHsl(color)
-}

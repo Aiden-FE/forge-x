@@ -26,7 +26,7 @@ export const HASH_LENGTH = 60
 
 /**
  * bcrypt modular crypt 格式（含 $2a/$2b/$2y 三前缀，PHP password_hash 产 $2y$）：
- * `$2x$` + 2 位工作因子 + 22 字符 salt + 31 字符摘要（base64 变体字符集 [./A-Za-z0-9]）。
+ * `$2a$` + 2 位工作因子 + 22 字符 salt + 31 字符摘要（base64 变体字符集 [./A-Za-z0-9]）。
  */
 export const BCRYPT_HASH_RE = /^\$2[aby]\$(\d{2})\$([./A-Za-z0-9]{22})([./A-Za-z0-9]{31})$/
 

@@ -39,8 +39,8 @@
           rows="8"
           @input="onInput"
         />
-        <p v-if="truncated" class="warning" data-test="he-limit-warning">
-          {{ t('htmlEntity.limitWarning') }}
+        <p v-if="overLimit" class="error" data-test="he-limit-error">
+          {{ t('htmlEntity.limitError') }}
         </p>
       </section>
 
@@ -79,7 +79,7 @@ import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import HtmlEntity from './HtmlEntity.vue'
-import { enforceInputLimit, escapeHtml, unescapeHtml } from './htmlEntity'
+import { escapeHtml, isOverLimit, unescapeHtml } from './htmlEntity'
 import type { UnescapeResult } from './htmlEntity'
 
 const { t } = useI18n()
@@ -98,7 +98,7 @@ type Mode = 'escape' | 'unescape'
 
 const mode = ref<Mode>('escape')
 const input = ref('')
-const truncated = ref(false)
+const overLimit = ref(false)
 const output = ref('')
 const unescapeResult = ref<UnescapeResult | null>(null)
 
@@ -110,13 +110,16 @@ let timer: number | undefined
 let copiedTimer: number | undefined
 
 function onInput(): void {
-  const res = enforceInputLimit(input.value)
-  if (res.truncated) {
-    input.value = res.text
-    truncated.value = true
-  } else {
-    truncated.value = false
+  // 超限明确报错、不触发计算；既有输出原样保留（非法输入只错该处）
+  if (isOverLimit(input.value)) {
+    overLimit.value = true
+    if (timer !== undefined) {
+      window.clearTimeout(timer)
+      timer = undefined
+    }
+    return
   }
+  overLimit.value = false
   scheduleConvert()
 }
 
@@ -176,7 +179,7 @@ async function copy(): Promise<void> {
 
 function clear(): void {
   input.value = ''
-  truncated.value = false
+  overLimit.value = false
   output.value = ''
   unescapeResult.value = null
 }

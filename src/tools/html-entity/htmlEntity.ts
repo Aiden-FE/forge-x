@@ -118,7 +118,7 @@ export function unescapeHtml(input: string): UnescapeResult {
   }
 }
 
-/** 输入上限：1 MiB（UTF-8 字节），超限截断并提示（平台惯例）。 */
+/** 输入上限：1 MiB（UTF-8 字节）；超限明确报错、不触发计算（票据 12 §5.6）。 */
 export const MAX_INPUT_BYTES = 1024 * 1024
 
 function utf8ByteLen(cp: number): number {
@@ -128,16 +128,13 @@ function utf8ByteLen(cp: number): number {
   return 4
 }
 
-/** 1 MiB 截断：码点边界，绝不产生半个字符。 */
-export function enforceInputLimit(text: string): { text: string; truncated: boolean } {
-  if (text.length * 3 <= MAX_INPUT_BYTES) return { text, truncated: false }
+/** 1 MiB 上限判定：短输入走快速路径，长输入按 UTF-8 字节精确计数。 */
+export function isOverLimit(text: string): boolean {
+  if (text.length * 3 <= MAX_INPUT_BYTES) return false
   let bytes = 0
-  let end = 0
   for (const ch of text) {
-    const b = utf8ByteLen(ch.codePointAt(0)!)
-    if (bytes + b > MAX_INPUT_BYTES) return { text: text.slice(0, end), truncated: true }
-    bytes += b
-    end += ch.length
+    bytes += utf8ByteLen(ch.codePointAt(0)!)
+    if (bytes > MAX_INPUT_BYTES) return true
   }
-  return { text, truncated: false }
+  return false
 }

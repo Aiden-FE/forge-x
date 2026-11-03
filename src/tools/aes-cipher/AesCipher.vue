@@ -297,6 +297,8 @@ async function encrypt(): Promise<void> {
     if (job !== encryptJob) return
     if ('envelope' in result) {
       envelope.value = result.envelope
+    } else if ('reason' in result && result.reason === 'unsupported-192') {
+      encryptError.value = t('aesCipher.errorUnsupported192')
     } else {
       encryptError.value = t('aesCipher.errorInvalidKey')
     }
@@ -358,7 +360,9 @@ function describeDecryptFailure(reason: DecryptFailureReason): void {
             ? t('aesCipher.errorBadBase64')
             : reason === 'invalid-key'
               ? t('aesCipher.errorInvalidKey')
-              : t('aesCipher.errorBadEnvelope')
+              : reason === 'unsupported-192'
+                ? t('aesCipher.errorUnsupported192')
+                : t('aesCipher.errorBadEnvelope')
   decryptErrorDetail.value =
     reason === 'gcm-auth' ? t('aesCipher.errorGcmAuthDetail') : ''
 }

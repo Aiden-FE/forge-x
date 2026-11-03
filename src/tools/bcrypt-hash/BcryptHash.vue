@@ -199,6 +199,7 @@ import type { ToolMeta } from '@/types/tool'
 import BcryptHash from './BcryptHash.vue'
 import { BcryptClient } from './bcrypt-client'
 import {
+  clampCost,
   DEFAULT_COST,
   MAX_COST,
   MIN_COST,
@@ -238,7 +239,7 @@ const genTruncated = computed(() => exceedsTruncationLimit(genPassword.value))
 function onCostInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   if (Number.isFinite(value) && value > 0) {
-    cost.value = Math.min(MAX_COST, Math.max(MIN_COST, Math.round(value)))
+    cost.value = clampCost(Math.round(value))
   }
 }
 

@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formatHex, hslToRgb, parseHex } from './color'
+import { formatHex, formatHsl, formatRgb, hslToRgb, parseHex, rgbToHsl } from './color'
 import {
   MONOCHROME_LIGHTNESS_STEPS,
   PALETTE_RULES,
   buildPalette,
-  hslOf,
   paletteHex,
   rotateHue,
-  swatchInfo,
   swatchTooltip,
 } from './palette'
-import type { RgbColor } from './color'
+import type { HslColor, RgbColor } from './color'
 
 /** 基色：hsl(30, 70%, 50%)（色相 30° 便于断言正负角度）。 */
 const BASE = hslToRgb({ h: 30, s: 70, l: 50, a: 1 })
@@ -24,6 +22,14 @@ function expectHue(color: RgbColor, expectedHue: number, label: string): void {
   const normalized = (((expectedHue % 360) + 360) % 360)
   close(hslOf(color).h, normalized, 0.5)
   void label
+}
+
+/** 结构化形态（原 palette.ts 的 swatchInfo/hslOf：仅测试与悬停提示构成使用，随测试定当）。 */
+function swatchInfo(color: RgbColor): { hex: string; rgb: string; hsl: string } {
+  return { hex: paletteHex(color), rgb: formatRgb(color), hsl: formatHsl(color) }
+}
+function hslOf(color: RgbColor): HslColor {
+  return rgbToHsl(color)
 }
 
 describe('规则集与固定产出数量', () => {

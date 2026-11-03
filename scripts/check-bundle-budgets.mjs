@@ -1,37 +1,22 @@
+import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Bundle budget gate (v0.4.0 platform conventions, spec.md appendix §1):
 //  - tool third-party deps must land in async chunks (首屏第三方增量 0);
-//  - per-tool on-demand budget ≤50 KB gzip, with exactly one documented
-//    exemption: sql-formatter ≤80 KB (ticket 07 §0);
-//  - tighter per-lib budgets from their tickets: expr-eval ≤10 KB (09);
-//  - worker bundles (bcrypt / sql) are self-contained assets ≤80 KB —
-//    sql-formatter and bcryptjs live inside their worker bundles, so they
-//    have no main-graph vendor chunk; the worker budget covers them.
-//
-// Usage: node scripts/check-bundle-budgets.mjs  (after `vite build` with
-// `build.manifest` enabled; see vite.config.ts manualChunks vendor naming).
+//  - per-vendor gzip budgets + worker budget live in scripts/vendor-chunks.mjs
+//    (single source shared with vite.config.ts manualChunks, so they can't
+//    drift).
 
-const VENDOR_BUDGETS_KB = {
-  'vendor-sql-formatter': 80, // hosted inside the sql worker bundle
-  'vendor-expr-eval': 10,
-  'vendor-cron-parser': 50,
-  'vendor-cronstrue': 50,
-  // hljs lib/common measures 53.7 KB gz on highlight.js 11.12.0 (research's
-  // 43.5 KB was an older build); the fixed 37-language set is spec-pinned
-  // and load-on-touch keeps it zero-cost until a code block appears.
-  'vendor-hljs': 60,
-  'vendor-cropperjs': 50,
-  'vendor-bcryptjs': 50, // hosted inside the bcrypt worker bundle
-}
+const VENDOR_BUDGETS_KB = JSON.parse(
+  JSON.stringify((await import('./vendor-chunks.mjs')).VENDOR_BUDGETS_KB),
+)
+const { WORKER_BUDGET_KB } = await import('./vendor-chunks.mjs')
 
 // vendor chunks hosted in worker bundles: no main-graph chunk can exist for
 // them, their size is enforced by the worker-asset budget instead.
 const WORKER_HOSTED_VENDORS = new Set(['vendor-sql-formatter', 'vendor-bcryptjs'])
-
-const WORKER_BUDGET_KB = 80
 
 function kb(bytes) {
   return Math.round((bytes / 1024) * 10) / 10
@@ -106,16 +91,9 @@ for (const [key, chunk] of Object.entries(manifest)) {
 // truly async); vendor chunks hosted in worker bundles are exempt here —
 // their size is enforced by the worker-asset budget instead.
 const deps = JSON.parse(readFileSync('package.json', 'utf8')).dependencies ?? {}
-const libToVendor = {
-  'sql-formatter': 'vendor-sql-formatter',
-  'cron-parser': 'vendor-cron-parser',
-  'cronstrue': 'vendor-cronstrue',
-  'expr-eval': 'vendor-expr-eval',
-  'highlight.js': 'vendor-hljs',
-  'cropperjs': 'vendor-cropperjs',
-  'bcryptjs': 'vendor-bcryptjs',
-}
-for (const [lib, name] of Object.entries(libToVendor)) {
+for (const [lib, name] of Object.entries(JSON.parse(
+  JSON.stringify((await import('./vendor-chunks.mjs')).VENDOR_CHUNK_MAP),
+))) {
   if (!deps[lib] || seenVendors.has(name) || WORKER_HOSTED_VENDORS.has(name)) continue
   fail(`expected async vendor chunk ${name} is missing from the build — dependency may have been statically inlined or renamed`)
 }

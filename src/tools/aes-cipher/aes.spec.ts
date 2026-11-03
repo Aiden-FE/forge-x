@@ -13,6 +13,7 @@ import {
   encryptWithPassphrase,
   encryptWithRawKey,
   exceedsInputLimit,
+  isUnsupportedKeyLengthError,
   parseEnvelope,
   parseRawKey,
 } from './aes'
@@ -277,5 +278,34 @@ describe('hex/base64 编码助手', () => {
     const bytes = new Uint8Array([0x46, 0x47, 0x58, 0x31])
     expect(bytesToHex(bytes)).toBe('46475831')
     expect(bytesToHex(bytes, 1)).toBe('46 47 58 31')
+  })
+})
+
+describe('AES-192 运行环境不支持时的优雅降级（WKWebView/Safari 无 AES-192 WebCrypto）', () => {
+  it('decryptWithKeyBytes：24 字节密钥 importKey 抛 NotSupportedError → unsupported-192', async () => {
+    const key24 = hex('000102030405060708090a0b0c0d0e0f1011121314151617')
+    // 先用真实 WebCrypto 造信封（node 支持 AES-192），再 mock 出不支持环境
+    const envelope = bytesToBase64(await encryptEnvelopeBytes({
+      mode: 'GCM',
+      keyBytes: key24,
+      salt: new Uint8Array(16),
+      iv: new Uint8Array(12),
+      plaintextBytes: new TextEncoder().encode('hi'),
+    }))
+    const originalImport = crypto.subtle.importKey
+    crypto.subtle.importKey = (() =>
+      Promise.reject(new DOMException('AES-192 unsupported here', 'NotSupportedError'))) as typeof crypto.subtle.importKey
+    try {
+      const outcome = await decryptWithKeyBytes(envelope, key24)
+      expect(outcome).toEqual({ ok: false, reason: 'unsupported-192' })
+    } finally {
+      crypto.subtle.importKey = originalImport
+    }
+  })
+
+  it('isUnsupportedKeyLengthError：NotSupportedError 命中，其余不命中', () => {
+    expect(isUnsupportedKeyLengthError(new DOMException('x', 'NotSupportedError'))).toBe(true)
+    expect(isUnsupportedKeyLengthError(new DOMException('x', 'OperationError'))).toBe(false)
+    expect(isUnsupportedKeyLengthError(new Error('x'))).toBe(false)
   })
 })

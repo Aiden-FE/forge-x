@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import { VENDOR_CHUNK_MAP } from './scripts/vendor-chunks.mjs'
+
+const vendorChunks: Record<string, string | undefined> = VENDOR_CHUNK_MAP
 
 // Tauri CLI sets TAURI_ENV_FAMILY (and related TAURI_ENV_*) inside `tauri dev`
 // and `tauri build`. When present we use a relative base so HTML / JS / CSS /
@@ -17,15 +20,7 @@ const isTauri = !!(
 // Named vendor chunks keep third-party deps out of the first-screen closure
 // and let scripts/check-bundle-budgets.mjs attribute per-lib gzip budgets
 // (v0.4.0 spec appendix §1: on-demand ≤50 KB, sql-formatter exempt ≤80 KB).
-const vendorChunkMap: Record<string, string> = {
-  'sql-formatter': 'vendor-sql-formatter',
-  'cron-parser': 'vendor-cron-parser',
-  'cronstrue': 'vendor-cronstrue',
-  'expr-eval': 'vendor-expr-eval',
-  'highlight.js': 'vendor-hljs',
-  'cropperjs': 'vendor-cropperjs',
-  'bcryptjs': 'vendor-bcryptjs',
-}
+// The map lives in scripts/vendor-chunks.mjs so the budget gate can't drift.
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -44,7 +39,7 @@ export default defineConfig({
           const last = matches[matches.length - 1]
           if (!last) return undefined
           if (process.env.DEBUG_CHUNKS) console.error('[manualChunks]', last[1])
-          return vendorChunkMap[last[1]]
+          return vendorChunks[last[1]]
         },
       },
     },

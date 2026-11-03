@@ -109,6 +109,11 @@ function randomBytes(n: number): Uint8Array {
   return bytes
 }
 
+/** WKWebView / Safari 的 WebCrypto 未实现 AES-192（24 字节密钥）——运行环境级降级提示。 */
+export function isUnsupportedKeyLengthError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'NotSupportedError'
+}
+
 function importAesKey(keyBytes: Uint8Array, mode: AesMode, usages: KeyUsage[]): Promise<CryptoKey> {
   const name = mode === 'GCM' ? 'AES-GCM' : 'AES-CBC'
   return crypto.subtle.importKey('raw', keyBytes as BufferSource, { name }, false, usages)
@@ -222,6 +227,7 @@ export async function encryptEnvelopeBytes(args: {
 
 export type DecryptFailureReason =
   | 'invalid-key' // raw key 非法（UI 只错该输入框）
+  | 'unsupported-192' // 运行环境不支持 AES-192（WKWebView/Safari），非密钥本身非法
   | 'bad-base64'
   | 'non-fgx1'
   | 'bad-envelope' // 版本/模式不认或段长不足
@@ -260,19 +266,29 @@ export async function encryptWithRawKey(args: {
   keyText: string
   plaintext: string
   iv?: Uint8Array
-}): Promise<{ ok: true; envelope: string; bits: KeyBits } | { ok: false; reason: RawKeyError; byteLength?: number }> {
+}): Promise<
+  | { ok: true; envelope: string; bits: KeyBits }
+  | { ok: false; reason: RawKeyError | 'unsupported-192'; byteLength?: number }
+> {
   const keyParse = parseRawKey(args.keyText)
   if (!keyParse.ok) return keyParse
   const ivLen = args.mode === 'GCM' ? GCM_IV_BYTES : CBC_IV_BYTES
   const iv = args.iv ?? randomBytes(ivLen)
-  const envelope = await encryptEnvelopeBytes({
+  try {
+    const envelope = await encryptEnvelopeBytes({
     mode: args.mode,
-    keyBytes: keyParse.bytes,
-    salt: randomBytes(SALT_BYTES),
-    iv,
-    plaintextBytes: new TextEncoder().encode(args.plaintext),
-  })
-  return { ok: true, envelope: bytesToBase64(envelope), bits: keyParse.bits }
+      keyBytes: keyParse.bytes,
+      salt: randomBytes(SALT_BYTES),
+      iv,
+      plaintextBytes: new TextEncoder().encode(args.plaintext),
+    })
+    return { ok: true, envelope: bytesToBase64(envelope), bits: keyParse.bits }
+  } catch (err) {
+    if (keyParse.bytes.length === 24 && isUnsupportedKeyLengthError(err)) {
+      return { ok: false, reason: 'unsupported-192' }
+    }
+    throw err
+  }
 }
 
 /**
@@ -299,7 +315,10 @@ export async function decryptWithKeyBytes(envelopeBase64: string, keyBytes: Uint
   let key: CryptoKey
   try {
     key = await importAesKey(keyBytes, mode, ['decrypt'])
-  } catch {
+  } catch (err) {
+    if (keyBytes.length === 24 && isUnsupportedKeyLengthError(err)) {
+      return { ok: false, reason: 'unsupported-192' }
+    }
     return { ok: false, reason: 'invalid-key' }
   }
   const params: AesGcmParams | AesCbcParams =

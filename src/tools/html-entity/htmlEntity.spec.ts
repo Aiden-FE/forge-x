@@ -5,7 +5,7 @@
  * 标签字面保留、未知实体行级定位、无分号原生规则。
  */
 import { describe, expect, it } from 'vitest'
-import { MAX_INPUT_BYTES, enforceInputLimit, escapeHtml, unescapeHtml } from './htmlEntity'
+import { MAX_INPUT_BYTES, escapeHtml, isOverLimit, unescapeHtml } from './htmlEntity'
 
 describe('escape：五个必需实体（验收 1）', () => {
   it('五实体逐一映射，撇号产出口径为 &#39;（非 &apos;）', () => {
@@ -145,23 +145,20 @@ describe('未知命名实体行级错误（验收 5）', () => {
   })
 })
 
-describe('1 MiB 输入上限（验收 6）', () => {
-  it('超限在码点边界截断并标记；emoji 不截半', () => {
+describe('1 MiB 输入上限（验收 6：超限明确报错，不触发计算）', () => {
+  it('超限判定为 true；emoji 输入按 UTF-8 字节精确计数', () => {
     const emoji = '\u{1F600}' // 4 字节
     const text = emoji.repeat(300_000) // 1.2 MB > 1 MiB
-    const res = enforceInputLimit(text)
-    expect(res.truncated).toBe(true)
-    expect(res.text.length % 2).toBe(0) // 代理对完整
-    expect((res.text + emoji).length % 2).toBe(0)
+    expect(isOverLimit(text)).toBe(true)
   })
 
-  it('未超限原样返回', () => {
+  it('未超限为 false', () => {
     const text = 'a'.repeat(1000)
-    expect(enforceInputLimit(text)).toEqual({ text, truncated: false })
+    expect(isOverLimit(text)).toBe(false)
   })
 
-  it('快速路径：短于上界 1/3 的输入必然安全', () => {
-    expect(enforceInputLimit('x'.repeat(MAX_INPUT_BYTES / 3 - 1)).truncated).toBe(false)
+  it('快速路径：短于上界 1/3 的输入必然安全（false）', () => {
+    expect(isOverLimit('x'.repeat(MAX_INPUT_BYTES / 3 - 1))).toBe(false)
   })
 
   it('1 MiB 级输入解码可完成（真实日历内）', () => {
