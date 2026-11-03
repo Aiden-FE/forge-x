@@ -125,27 +125,34 @@
         </div>
       </section>
 
-      <!-- 互补色 -->
+      <!-- 色板（13 票扩展）：六规则固定产出；替换原「互补色」单 swatch 区
+           （互补规则产出 2 色并入此区）。点击复制大写 HEX，悬停展示 HEX/RGB/HSL。 -->
       <section class="panel">
-        <h2 class="section-title">{{ t('colorConverter.complement') }}</h2>
-        <div class="complement-row">
-          <span class="swatch small" :title="complementHex">
-            <span class="swatch-color" :style="{ background: complementCss }" />
-          </span>
-          <code class="mono complement-hex" data-test="complement-hex">{{ complementHex }}</code>
-          <div class="actions">
-            <button class="btn primary" data-test="complement-apply" @click="applyComplement">
-              <Check :size="16" />
-              {{ t('colorConverter.apply') }}
-            </button>
-            <button class="btn" data-test="complement-set-foreground" @click="useComplementAsForeground">
-              {{ t('colorConverter.setForeground') }}
-            </button>
-            <button class="btn" data-test="complement-set-background" @click="useComplementAsBackground">
-              {{ t('colorConverter.setBackground') }}
+        <h2 class="section-title" data-test="palette-title">{{ t('colorConverter.palette.title') }}</h2>
+        <p class="palette-hint" data-test="palette-hint">{{ t('colorConverter.palette.hint') }}</p>
+        <div
+          v-for="rule in PALETTE_RULES"
+          :key="rule.id"
+          class="palette-rule"
+          :data-test="`palette-rule-${rule.id}`"
+        >
+          <span class="rule-label">{{ t(`colorConverter.palette.rules.${rule.id}`) }}</span>
+          <div class="palette-swatches">
+            <button
+              v-for="(color, index) in palettes[rule.id]"
+              :key="index"
+              class="palette-swatch"
+              :style="{ background: formatRgb(color) }"
+              :title="swatchTooltip(color)"
+              :data-test="`palette-swatch-${rule.id}-${index}`"
+              :aria-label="`${t('colorConverter.palette.copyHex')} ${swatchTooltip(color)}`"
+              @click="copyPaletteHex(rule.id, index, color)"
+            >
+              <Check v-if="copiedKey === `${rule.id}-${index}`" :size="16" class="copied-check" />
             </button>
           </div>
         </div>
+        <p v-if="copiedMessage" class="hint copied" data-test="palette-copied">{{ copiedMessage }}</p>
       </section>
     </div>
   </ToolLayout>
@@ -159,7 +166,6 @@ import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import ColorConverter from './ColorConverter.vue'
 import {
-  complementary,
   contrastRatio,
   formatHex,
   formatHsl,
@@ -171,17 +177,19 @@ import {
   wcagLevels,
 } from './color'
 import type { RgbColor } from './color'
+import { PALETTE_RULES, buildPalette, paletteHex, swatchTooltip } from './palette'
+import type { PaletteRuleId } from './palette'
 
 const { t } = useI18n()
 
 const toolMeta: ToolMeta = {
   id: 'color-converter',
   name: '颜色转换器',
-  description: 'HEX/RGB/HSL 互转、对比度检查与互补色',
+  description: 'HEX/RGB/HSL 互转、对比度检查与六规则色板',
   category: 'generate',
   icon: 'Palette',
   component: ColorConverter,
-  keywords: ['color', 'hex', 'rgb', 'hsl', 'wcag', 'contrast', '颜色'],
+  keywords: ['color', 'hex', 'rgb', 'hsl', 'wcag', 'contrast', 'palette', '色板', '颜色'],
 }
 
 // ---- 规范色与三个色式文本框的双向同步 ----
@@ -208,6 +216,7 @@ function deferred(fn: () => void): () => void {
 }
 onUnmounted(() => {
   for (const id of pendingTimers) window.clearTimeout(id)
+  if (paletteCopyTimer !== undefined) clearTimeout(paletteCopyTimer)
 })
 
 function setColor(color: RgbColor, source: 'hex' | 'rgb' | 'hsl' | 'external'): void {
@@ -342,20 +351,33 @@ const levelBadges = computed(() => {
   ]
 })
 
-// ---- 互补色 ----
+// ---- 色板（13 票扩展：六规则固定产出，替换原互补色单 swatch 区） ----
 
-const complement = computed(() => complementary(current.value))
-const complementHex = computed(() => formatHex(complement.value))
-const complementCss = computed(() => formatRgb(complement.value))
+const palettes = computed<Record<PaletteRuleId, RgbColor[]>>(() => {
+  const map = {} as Record<PaletteRuleId, RgbColor[]>
+  for (const rule of PALETTE_RULES) {
+    map[rule.id] = buildPalette(rule.id, current.value)
+  }
+  return map
+})
 
-function applyComplement(): void {
-  setColor(complement.value, 'external')
-}
-function useComplementAsForeground(): void {
-  setForeground(complement.value)
-}
-function useComplementAsBackground(): void {
-  setBackground(complement.value)
+const copiedKey = ref('')
+const copiedMessage = ref('')
+let paletteCopyTimer: ReturnType<typeof setTimeout> | undefined
+
+async function copyPaletteHex(ruleId: PaletteRuleId, index: number, color: RgbColor): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(paletteHex(color))
+    copiedKey.value = `${ruleId}-${index}`
+    copiedMessage.value = t('colorConverter.palette.copied', { hex: paletteHex(color) })
+    if (paletteCopyTimer !== undefined) clearTimeout(paletteCopyTimer)
+    paletteCopyTimer = setTimeout(() => {
+      copiedKey.value = ''
+      copiedMessage.value = ''
+    }, 1500)
+  } catch {
+    // Clipboard unavailable — silently ignore.
+  }
 }
 </script>
 
@@ -413,15 +435,6 @@ function useComplementAsBackground(): void {
   inset: 0;
   opacity: 0;
   cursor: pointer;
-}
-
-.swatch.small {
-  width: 40px;
-  cursor: default;
-}
-
-.swatch.small .swatch-input {
-  display: none;
 }
 
 .fields {
@@ -591,15 +604,57 @@ function useComplementAsBackground(): void {
   border-color: var(--error);
 }
 
-.complement-row {
+.palette-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-quaternary);
+}
+
+.palette-rule {
   display: flex;
   align-items: center;
   gap: var(--space-md);
   flex-wrap: wrap;
 }
 
-.complement-hex {
+.rule-label {
+  min-width: 110px;
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+}
+
+.palette-swatches {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.palette-swatch {
+  position: relative;
+  width: 48px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: transform var(--transition-fast);
+}
+
+.palette-swatch:hover {
+  transform: scale(1.06);
+}
+
+.copied-check {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+}
+
+.hint.copied {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--success);
 }
 </style>

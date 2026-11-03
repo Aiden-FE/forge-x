@@ -4,7 +4,7 @@ export default {
   'zh-CN': {
     tools: {
       'markdown-html': 'Markdown↔HTML 转换',
-      'markdown-htmlDesc': 'GFM 全套双向转换，输出一律经 DOMPurify 净化',
+      'markdown-htmlDesc': 'GFM 全套双向转换，输出一律经 DOMPurify 净化；围栏代码预览高亮',
     },
     markdownHtml: {
       directionLabel: '方向',
@@ -21,6 +21,8 @@ export default {
       previewShow: '展开预览',
       previewHide: '收起预览',
       previewHint: '渲染经净化后的输出；折叠预览时无任何请求',
+      highlightNotice: '围栏代码块仅在预览中语法高亮（跟随应用明暗）；复制/下载保持裸 <pre><code>。',
+      noHighlight: '无高亮',
       copy: '复制',
       copied: '已复制',
       download: '下载',
@@ -39,7 +41,7 @@ export default {
   en: {
     tools: {
       'markdown-html': 'Markdown↔HTML Converter',
-      'markdown-htmlDesc': 'Full GFM two-way conversion, every output sanitized by DOMPurify',
+      'markdown-htmlDesc': 'Full GFM two-way conversion, every output sanitized by DOMPurify; preview-only code highlighting',
     },
     markdownHtml: {
       directionLabel: 'Direction',
@@ -56,6 +58,8 @@ export default {
       previewShow: 'Show preview',
       previewHide: 'Hide preview',
       previewHint: 'Renders the sanitized output; no requests while collapsed',
+      highlightNotice: 'Fenced code is syntax-highlighted in the preview only (follows the app theme); copy/download keeps bare <pre><code>.',
+      noHighlight: 'No highlight',
       copy: 'Copy',
       copied: 'Copied',
       download: 'Download',

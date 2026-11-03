@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 票据：.scratch/hot-tools-v0.4.0/issues/06-totp-spec.md 验收 7（及 UI 可断言项）
 // - 粘贴密钥 → 出码 → 复制 otpauth:// → 删除条目
 // - otpauth:// 两种 issuer 写法 / 坏 URI 整条报错 / base32 容错
@@ -37,24 +41,28 @@ test.describe('TOTP 验证器 e2e', () => {
   })
 
   test('轮换：跨过周期边界瞬间换码（clock 推进 30 秒）', async ({ page }) => {
-    await page.clock.install()
-    await page.clock.setFixedTime(new Date('1970-01-01T00:00:59Z'))
+    // 虚钟从 T=59 起步；pauseAt 跳到边界 T=60 并挂起；fastForward 再推 30 秒
+    await page.clock.install({ time: new Date('1970-01-01T00:00:59Z') })
+    // 同刻冻结虚钟：不同引擎下的实时流逝会造成竞态（背景时间不再推进）
+    await page.clock.pauseAt(new Date('1970-01-01T00:00:59Z'))
     await openTool(page)
 
     await page.fill('[data-test="totp-secret-input"]', RFC_SECRET_BASE32)
     await page.click('[data-test="totp-add"]')
     await expect(page.locator('[data-test="totp-code"]')).toHaveText('287082')
 
-    // 推进 1 秒到边界（T=60，counter 1→2）：码立即更换、剩余秒数回到 30
-    await page.clock.fastForward('1s')
+    // pauseAt 跳到边界 T=60（counter 1→2）：码立即更换、剩余秒数回到 30
+    // runFor 在冻结钟上推进虚拟时间 1 秒（T=60，counter 1→2）
+    await page.clock.runFor(1_000)
     const afterBoundary = page.locator('[data-test="totp-code"]')
     await expect(afterBoundary).not.toHaveText('287082')
     await expect(page.locator('[data-test="totp-remaining"]')).toHaveText(/^30(秒|s)$/)
     const codeAtCounter2 = (await afterBoundary.textContent()) ?? ''
 
-    // 再推进 30 秒 → 下一窗口，码再次更换
-    await page.clock.fastForward('30s')
+    // 再推进 30 秒 → 下一窗口（T=90，counter 3），码再次更换
+    await page.clock.runFor(30_000)
     await expect(page.locator('[data-test="totp-code"]')).not.toHaveText(codeAtCounter2)
+    await expect(page.locator('[data-test="totp-remaining"]')).toHaveText(/^30(秒|s)$/)
   })
 
   test('otpauth:// URI 整段解析：label 前缀与 query issuer 两写法、全参数带入（验收 3）', async ({ page }) => {
@@ -111,8 +119,9 @@ test.describe('TOTP 验证器 e2e', () => {
   })
 
   test('参数变更立即重算（时效码豁免）：位数切到 8 位码即时变化', async ({ page }) => {
-    await page.clock.install()
-    await page.clock.setFixedTime(new Date('1970-01-01T00:00:59Z'))
+    await page.clock.install({ time: new Date('1970-01-01T00:00:59Z') })
+    // 同刻冻结虚钟：不同引擎下的实时流逝会造成竞态（背景时间不再推进）
+    await page.clock.pauseAt(new Date('1970-01-01T00:00:59Z'))
     await openTool(page)
 
     await page.fill('[data-test="totp-secret-input"]', RFC_SECRET_BASE32)
@@ -123,11 +132,11 @@ test.describe('TOTP 验证器 e2e', () => {
     await page.locator('[data-test="totp-digits"]').selectOption('8')
     await expect(page.locator('[data-test="totp-code"]')).toHaveText('94287082')
 
-    // 周期切 60 秒：counter 变化 → 码值更换
+    // 周期切 60 秒：counter 变化（floor(59/60)=0）→ 码值更换
     await page.locator('[data-test="totp-period"]').selectOption('60')
     await expect(page.locator('[data-test="totp-code"]')).not.toHaveText('94287082')
-    // 周期 60：T=59 剩余 59 秒
-    await expect(page.locator('[data-test="totp-remaining"]')).toHaveText(/^59(秒|s)$/)
+    // 周期 60：剩余 = 周期 − (T mod 周期) = 60 − 59 = 1 秒
+    await expect(page.locator('[data-test="totp-remaining"]')).toHaveText(/^1(秒|s)$/)
   })
 
   test('记住条目 opt-in 闭环：记住 → 刷新仍在；未记住 → 刷新即失；清除全部 → 空且警示消失（验收 6）', async ({ page }) => {

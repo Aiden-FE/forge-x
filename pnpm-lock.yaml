@@ -26,6 +26,9 @@ importers:
       cronstrue:
         specifier: ^3.38.0
         version: 3.38.0
+      cropperjs:
+        specifier: ^1.7.0
+        version: 1.7.0
       diff:
         specifier: ^9.0.0
         version: 9.0.0
@@ -38,6 +41,9 @@ importers:
       expr-eval:
         specifier: ^2.0.2
         version: 2.0.2
+      highlight.js:
+        specifier: ^11.12.0
+        version: 11.12.0
       js-yaml:
         specifier: ^5.4.3
         version: 5.4.3
@@ -546,6 +552,9 @@ packages:
     resolution: {integrity: sha512-i10xR7fS4AH9LKwmt3gYdt/5lSsB2qFGSNfC8aeyYybxo48DCMz+nUrSVI4kUj8yo+SgTbMJqp/BWEem9avlcA==}
     hasBin: true
 
+  cropperjs@1.7.0:
+    resolution: {integrity: sha512-AkGnZxr7xAJBa63ObXq5ZKLkh9c8wisC+Ym8VzIDn3KZ+6qRTbBnOl2w2dFOTMzLP5IcfOpEK9PICDywNXhncg==}
+
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
@@ -608,6 +617,10 @@ packages:
   happy-dom@21.0.4:
     resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
     engines: {node: '>=20.0.0'}
+
+  highlight.js@11.12.0:
+    resolution: {integrity: sha512-nbfWpyRMcMrPMmDwJB+dhX/eiaPKtc2RB+0QZskqJ3WjRA/FDS0e9hZrx8EC/lbEv8gXy98FcDbNa/dspAaJMg==}
+    engines: {node: '>=12.0.0'}
 
   hookable@5.5.3:
     resolution: {integrity: sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==}
@@ -1415,6 +1428,8 @@ snapshots:
 
   cronstrue@3.38.0: {}
 
+  cropperjs@1.7.0: {}
+
   csstype@3.2.3: {}
 
   detect-libc@2.1.2: {}
@@ -1465,6 +1480,8 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  highlight.js@11.12.0: {}
 
   hookable@5.5.3: {}
 

@@ -64,6 +64,76 @@
           </button>
         </div>
       </section>
+
+      <!-- 词频 Top-N（分词口径：按词 = Segmenter 词级；按字 = CJK 逐字） -->
+      <section class="panel" data-test="freq-section">
+        <div class="freq-head">
+          <h2 class="section-title">{{ t('textStats.freqTitle') }}</h2>
+          <div class="seg" role="group" :aria-label="t('textStats.freqModeLabel')" data-test="freq-mode">
+            <button
+              type="button"
+              class="seg-btn"
+              :class="{ active: freqMode === 'word' }"
+              data-test="freq-mode-word"
+              @click="freqMode = 'word'"
+            >
+              {{ t('textStats.freqModeWord') }}
+            </button>
+            <button
+              type="button"
+              class="seg-btn"
+              :class="{ active: freqMode === 'char' }"
+              data-test="freq-mode-char"
+              @click="freqMode = 'char'"
+            >
+              {{ t('textStats.freqModeChar') }}
+            </button>
+          </div>
+          <div class="seg" role="group" :aria-label="t('textStats.freqTierLabel')" data-test="freq-tiers">
+            <button
+              v-for="n in TOP_N_TIERS"
+              :key="n"
+              type="button"
+              class="seg-btn"
+              :class="{ active: topN === n }"
+              :data-test="`freq-tier-${n}`"
+              @click="topN = n"
+            >
+              {{ n }}
+            </button>
+          </div>
+        </div>
+        <p class="hint">{{ t('textStats.freqHint') }}</p>
+        <p class="hint">{{ t('textStats.freqLatinHint') }}</p>
+        <table v-if="freqResult.entries.length > 0" class="freq-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t('textStats.freqColWord') }}</th>
+              <th scope="col" class="num">{{ t('textStats.freqColCount') }}</th>
+              <th scope="col" class="num">{{ t('textStats.freqColShare') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="entry in freqRows"
+              :key="entry.token"
+              class="freq-row"
+              :class="{ copied: copiedToken === entry.token }"
+              :title="t('textStats.freqCopyHint')"
+              data-test="freq-row"
+              @click="copyWord(entry.token)"
+            >
+              <td class="mono">{{ entry.token }}</td>
+              <td class="num">{{ entry.count }}</td>
+              <td class="num">{{ shareLabel(entry.count) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="hint" data-test="freq-empty">{{ t('textStats.freqEmpty') }}</p>
+        <p v-if="freqResult.total > 0" class="hint" data-test="freq-total">
+          {{ t('textStats.freqTotal', { total: String(freqResult.total) }) }}
+        </p>
+      </section>
     </div>
   </ToolLayout>
 </template>
@@ -76,6 +146,8 @@ import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import TextStats from './TextStats.vue'
 import { computeStats, enforceInputLimit } from './stats'
+import { DEFAULT_TOP_N, TOP_N_TIERS, computeWordFrequency, sharePercent } from './frequency'
+import type { FrequencyMode } from './frequency'
 
 const { t } = useI18n()
 
@@ -86,7 +158,7 @@ const toolMeta: ToolMeta = {
   category: 'text',
   icon: 'ChartNoAxesColumn',
   component: TextStats,
-  keywords: ['text', 'stats', 'word count', 'character', 'reading time', '字数', '统计'],
+  keywords: ['text', 'stats', 'word count', 'character', 'reading time', 'word frequency', 'top-n', '字数', '统计', '词频'],
 }
 
 // ---- 实时统计（防抖，延续平台联动惯例） ----
@@ -129,6 +201,7 @@ function onInput(): void {
 onUnmounted(() => {
   if (timer !== undefined) window.clearTimeout(timer)
   if (copiedTimer !== undefined) window.clearTimeout(copiedTimer)
+  if (copiedTokenTimer !== undefined) window.clearTimeout(copiedTokenTimer)
 })
 
 // ---- 展示 ----
@@ -172,6 +245,33 @@ function clear(): void {
   text.value = ''
   truncated.value = false
   flushStats()
+}
+
+// ---- 词频 Top-N（跟随防抖后的文本实时联动） ----
+
+/** 分词口径：按词（真词频）/ 按字（CJK 逐字）；默认按词。 */
+const freqMode = ref<FrequencyMode>('word')
+const topN = ref<number>(DEFAULT_TOP_N)
+
+const freqResult = computed(() => computeWordFrequency(debouncedText.value, freqMode.value))
+/** Top-N 截断只在展示层：total 不受影响（总数依据不丢失） */
+const freqRows = computed(() => freqResult.value.entries.slice(0, topN.value))
+
+function shareLabel(count: number): string {
+  return `${sharePercent(count, freqResult.value.total).toFixed(1)}%`
+}
+
+const copiedToken = ref('')
+let copiedTokenTimer: number | undefined
+
+async function copyWord(token: string): Promise<void> {
+  await navigator.clipboard.writeText(token)
+  copiedToken.value = token
+  if (copiedTokenTimer !== undefined) window.clearTimeout(copiedTokenTimer)
+  copiedTokenTimer = window.setTimeout(() => {
+    copiedToken.value = ''
+    copiedTokenTimer = undefined
+  }, 1500)
 }
 </script>
 
@@ -260,6 +360,94 @@ function clear(): void {
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 590;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.freq-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.seg-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.seg-btn + .seg-btn {
+  border-left: 1px solid var(--border);
+}
+
+.seg-btn:hover {
+  background: var(--bg-hover);
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.freq-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.freq-table th {
+  text-align: left;
+  font-weight: 510;
+  color: var(--text-secondary);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.freq-table th.num,
+.freq-table td.num {
+  text-align: right;
+  width: 88px;
+}
+
+.freq-row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.freq-row:hover {
+  background: var(--bg-hover);
+}
+
+.freq-row.copied td {
+  color: var(--success);
+}
+
+.freq-table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  word-break: break-all;
 }
 
 .btn {

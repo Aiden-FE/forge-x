@@ -8,5 +8,5 @@ export default {
   category: 'convert',
   icon: 'Scaling',
   component: defineAsyncComponent(() => import('./ImageResize.vue')),
-  keywords: ['image', 'resize', 'compress', 'scale', 'png', 'jpeg', 'webp', '图片', '缩放', '压缩'],
+  keywords: ['image', 'resize', 'compress', 'scale', 'png', 'jpeg', 'webp', 'crop', 'rotate', '图片', '缩放', '压缩', '裁剪', '旋转'],
 } satisfies ToolMeta

@@ -69,9 +69,11 @@
       </div>
 
       <!-- Preview (md→html only): collapsible, collapsed by default; while
-           collapsed the iframe DOM does not exist, so the whole tool makes
-           zero network requests. The sandboxed iframe renders the sanitized
-           output only — scripts are doubly blocked (sanitized + sandbox). -->
+           collapsed the iframe DOM does not exist. Fenced code blocks are
+           syntax-highlighted in the preview only (load-on-touch: highlight.js
+           is imported when — and only when — the output contains
+           <pre><code>; see highlight.ts). The sandboxed iframe renders the
+           sanitized preview HTML only — scripts are doubly blocked. -->
       <div v-if="direction === 'md-to-html'" class="preview" data-test="preview-section">
         <div class="preview-head">
           <button
@@ -84,14 +86,17 @@
             <EyeOff v-else :size="16" />
             {{ previewOpen ? t('markdownHtml.previewHide') : t('markdownHtml.previewShow') }}
           </button>
-          <span class="hint">{{ t('markdownHtml.previewHint') }}</span>
+          <span v-if="highlightPreview" class="hint" data-test="hljs-note">
+            {{ t('markdownHtml.highlightNotice') }}
+          </span>
+          <span v-else class="hint">{{ t('markdownHtml.previewHint') }}</span>
         </div>
         <iframe
           v-if="previewOpen && output"
           class="preview-frame"
           data-test="preview"
           sandbox=""
-          :srcdoc="output"
+          :srcdoc="previewSrcdoc"
           title="markdown-html-preview"
         />
       </div>
@@ -108,17 +113,21 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Copy, Download, Eye, EyeOff, Trash2 } from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
+import { useThemeStore } from '@/stores/theme'
 import type { ToolMeta } from '@/types/tool'
 import MarkdownHtml from './MarkdownHtml.vue'
-import { convert } from './convert'
+import { convert, loadSanitizer } from './convert'
 import type { Direction, MarkdownHtmlError } from './convert'
+import { buildHighlightedPreview, outputHasCodeBlocks } from './highlight'
+import type { HighlightedPreview } from './highlight'
 
 const { t } = useI18n()
+const themeStore = useThemeStore()
 
 const toolMeta: ToolMeta = {
   id: 'markdown-html',
   name: 'Markdown↔HTML 转换',
-  description: 'GFM 全套双向转换，输出一律经 DOMPurify 净化',
+  description: 'GFM 全套双向转换，输出一律经 DOMPurify 净化；围栏代码预览高亮',
   category: 'text',
   icon: 'FileCode2',
   component: MarkdownHtml,
@@ -130,10 +139,31 @@ const output = ref('')
 const errors = ref<MarkdownHtmlError[]>([])
 const copied = ref(false)
 const previewOpen = ref(false) // collapsed by default (spec §4)
+// 13 票扩展：预览路径专用高亮结果（触达加载——仅在输出含 <pre><code> 时产生）。
+const highlightPreview = ref<HighlightedPreview | null>(null)
 
 const outputPlaceholder = computed(() =>
   input.value.trim() === '' ? t('markdownHtml.outputEmpty') : '',
 )
+
+/**
+ * 预览 iframe 的 srcdoc：输出含代码块时用高亮版（hljs span 仅在此 DOM），
+ * 否则原样输出；主题样式跟随应用明暗（两套样式触达时都已加载，这里响应式
+ * 切换注入哪一套）。
+ */
+const previewSrcdoc = computed(() => {
+  const body = highlightPreview.value?.html || output.value
+  const styles = highlightPreview.value?.styles
+  const themeCss = styles ? (themeStore.theme === 'dark' ? styles.dark : styles.light) : ''
+  return [
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><style>',
+    themeCss,
+    'body{margin:16px;}',
+    '</style></head><body>',
+    body,
+    '</body></html>',
+  ].join('')
+})
 
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 let runToken = 0
@@ -148,6 +178,7 @@ async function convertNow() {
   const text = input.value
   output.value = ''
   errors.value = []
+  highlightPreview.value = null
 
   if (text.trim() === '') return
 
@@ -166,6 +197,23 @@ async function convertNow() {
     output.value = outcome.value
   } else {
     errors.value = outcome.errors
+    return
+  }
+
+  // 触达加载闸门：只有 md→html 且输出含围栏代码块时才拉起 highlight.js；
+  // 无代码块的文档到此为止，零 hljs 成本。
+  if (direction.value === 'md-to-html' && outputHasCodeBlocks(output.value)) {
+    try {
+      const preview = await buildHighlightedPreview(text, {
+        sanitize: await loadSanitizer(),
+        noHighlightLabel: t('markdownHtml.noHighlight'),
+      })
+      if (token !== runToken) return
+      highlightPreview.value = preview.html ? preview : null
+    } catch {
+      // 高亮是附加层：任何加载失败都回退为裸输出预览。
+      highlightPreview.value = null
+    }
   }
 }
 
@@ -213,6 +261,7 @@ function clear() {
   input.value = ''
   output.value = ''
   errors.value = []
+  highlightPreview.value = null
 }
 
 onBeforeUnmount(() => {

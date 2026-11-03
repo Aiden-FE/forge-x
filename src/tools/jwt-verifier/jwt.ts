@@ -11,12 +11,20 @@ export type JwtVerifyErrorCode =
   | 'invalid-key'
   | 'verification-error'
 
+/** 签发视图支持的算法：HS256 对称 + RS256/ES256 非对称（13 票扩展）。 */
+export type JwtSignAlgorithm = 'HS256' | 'RS256' | 'ES256'
+
 export type JwtGenerateErrorCode =
   | 'empty-secret'
   | 'header-json'
   | 'header-not-object'
   | 'payload-json'
   | 'payload-not-object'
+  | 'pem-empty'
+  | 'pem-format'
+  | 'pem-pkcs1'
+  | 'pem-encrypted'
+  | 'pem-import'
 
 export type JwtGenerateResult =
   | {
@@ -24,6 +32,8 @@ export type JwtGenerateResult =
       token: string
       header: Record<string, unknown>
       payload: Record<string, unknown>
+      /** 非对称签发时派生的公钥 JWK JSON（供「用公钥验签」桥接既有验签区）。 */
+      publicJwkJson?: string
     }
   | {
       ok: false
@@ -33,7 +43,12 @@ export type JwtGenerateResult =
 export type JwtGenerateInput = {
   headerText: string
   payloadText: string
+  /** 缺省按 HS256（v0.3.0 语义兼容）。 */
+  algorithm?: JwtSignAlgorithm
+  /** HS256 专用；非对称算法忽略。 */
   secret: string
+  /** RS256/ES256 专用：PKCS#8 PEM 私钥（仅内存级）。 */
+  privateKeyPem?: string
 }
 
 /** exp/iat 时间快捷的预设（CONTEXT.md：时间值以 Unix 秒计）。 */
@@ -161,6 +176,95 @@ function decodeStandardBase64(value: string): Uint8Array | null {
   } catch {
     return null
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * 13 票扩展：非对称签发（PKCS#8 PEM 私钥 → RS256 / ES256）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 解析私钥 PEM，仅接受 PKCS#8（`BEGIN PRIVATE KEY`）。
+ * PKCS#1（`BEGIN RSA PRIVATE KEY`）与 SEC1（`BEGIN EC PRIVATE KEY`）是结构化
+ * 的「located error」：错误落在 PEM 框，并点名识别到的标签 + 给出转换提示。
+ */
+export type PemPrivateKeyParseResult =
+  | { ok: true; der: Uint8Array }
+  | { ok: false; reason: 'empty' | 'format' | 'pkcs1' | 'encrypted' }
+
+export function parsePemPrivateKey(pem: string): PemPrivateKeyParseResult {
+  const trimmed = pem.trim()
+  if (!trimmed) return { ok: false, reason: 'empty' }
+
+  const labelMatch = /-----BEGIN ([A-Z0-9 ]+?)-----/.exec(trimmed)
+  if (!labelMatch) return { ok: false, reason: 'format' }
+  const label = labelMatch[1] ?? ''
+
+  if (label === 'RSA PRIVATE KEY' || label === 'EC PRIVATE KEY') {
+    return { ok: false, reason: 'pkcs1' }
+  }
+  if (label === 'ENCRYPTED PRIVATE KEY') {
+    return { ok: false, reason: 'encrypted' }
+  }
+  if (label !== 'PRIVATE KEY') {
+    return { ok: false, reason: 'format' }
+  }
+
+  const der = pemToDer(trimmed)
+  if (!der || der.length === 0) return { ok: false, reason: 'format' }
+  return { ok: true, der }
+}
+
+async function importPkcs8PrivateKey(
+  algorithm: 'RS256' | 'ES256',
+  der: Uint8Array,
+): Promise<CryptoKey> {
+  const params: AlgorithmIdentifier | RsaHashedImportParams | EcKeyImportParams =
+    algorithm === 'RS256'
+      ? { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }
+      : { name: 'ECDSA', namedCurve: 'P-256' }
+  // extractable：签发成功后导出公钥 JWK（「用公钥验签」桥接）；私钥本身仅内存级。
+  return crypto.subtle.importKey('pkcs8', toArrayBuffer(der), params, true, ['sign'])
+}
+
+/** 从已导入的 PKCS#8 私钥导出公钥 JWK JSON（RSA 保留 n/e；EC 保留 crv/x/y）。 */
+export async function derivePublicJwkJson(privateKey: CryptoKey): Promise<string> {
+  const jwk = await crypto.subtle.exportKey('jwk', privateKey)
+  const pub: JsonWebKey =
+    jwk.kty === 'RSA'
+      ? { kty: 'RSA', alg: 'RS256', n: jwk.n, e: jwk.e }
+      : { kty: 'EC', alg: 'ES256', crv: jwk.crv, x: jwk.x, y: jwk.y }
+  return JSON.stringify(pub)
+}
+
+async function signJwtWithPrivateKey(
+  algorithm: 'RS256' | 'ES256',
+  signingInput: string,
+  privateKeyPem: string,
+): Promise<{ ok: true; token: string; publicJwkJson: string } | { ok: false; reason: JwtGenerateErrorCode }> {
+  const pem = parsePemPrivateKey(privateKeyPem)
+  if (!pem.ok) {
+    return { ok: false, reason: `pem-${pem.reason}` as JwtGenerateErrorCode }
+  }
+
+  let key: CryptoKey
+  try {
+    key = await importPkcs8PrivateKey(algorithm, pem.der)
+  } catch {
+    // 密钥体合法 PKCS#8 但与算法不匹配（如 EC 密钥选了 RS256）。
+    return { ok: false, reason: 'pem-import' }
+  }
+
+  const raw = await crypto.subtle.sign(
+    algorithm === 'RS256'
+      ? { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }
+      : { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    new TextEncoder().encode(signingInput),
+  )
+  const signature =
+    algorithm === 'ES256' ? ecdsaWebCryptoSignatureToJwt(raw) : new Uint8Array(raw)
+  const publicJwkJson = await derivePublicJwkJson(key)
+  return { ok: true, token: encodeBase64Url(signature), publicJwkJson }
 }
 
 function pemToDer(pem: string): Uint8Array | null {
@@ -407,11 +511,19 @@ async function signJwtWithHs256(signingInput: string, secret: string): Promise<U
 }
 
 /**
- * 生成视图的 HS256 本地签名（E2 扩展）：header / payload 均为 JSON 对象文本，
- * secret 为 UTF-8 文本，仅存于调用方内存。签名始终使用 HS256（WebCrypto
- * crypto.subtle），非对称算法不在范围内。
+ * 生成视图的本地签名（E2 扩展 + 13 票非对称扩展）：header / payload 均为 JSON
+ * 对象文本，密钥仅存于调用方内存。
+ * - HS256：secret 为 UTF-8 文本（v0.3.0 语义，原样保留）。
+ * - RS256 / ES256：PKCS#8 PEM 私钥（仅 `BEGIN PRIVATE KEY`；PKCS#1/SEC1 明确
+ *   报错并提示转换）；签发时 header 的 alg 覆写为所选算法，保证 token 可验。
  */
 export async function generateJwt(input: JwtGenerateInput): Promise<JwtGenerateResult> {
+  const algorithm = input.algorithm ?? 'HS256'
+
+  if (algorithm !== 'HS256') {
+    return generateJwtAsymmetric(input, algorithm)
+  }
+
   const secret = input.secret.trim()
   if (!secret) return { ok: false, reason: 'empty-secret' }
 
@@ -435,5 +547,39 @@ export async function generateJwt(input: JwtGenerateInput): Promise<JwtGenerateR
     token: `${signingInput}.${encodeBase64Url(signature)}`,
     header: header.value,
     payload: payload.value,
+  }
+}
+
+async function generateJwtAsymmetric(
+  input: JwtGenerateInput,
+  algorithm: 'RS256' | 'ES256',
+): Promise<JwtGenerateResult> {
+  const header = parseJwtJsonObject(input.headerText)
+  if (!header.ok) {
+    return { ok: false, reason: header.reason === 'json' ? 'header-json' : 'header-not-object' }
+  }
+
+  const payload = parseJwtJsonObject(input.payloadText)
+  if (!payload.ok) {
+    return { ok: false, reason: payload.reason === 'json' ? 'payload-json' : 'payload-not-object' }
+  }
+
+  // alg 覆写为所选算法：token 的 header 必须与实际签名算法一致，否则验签区
+  // 按 header.alg 选算法时永远失败。
+  const signedHeader = { ...header.value, alg: algorithm }
+  const headerSegment = encodeBase64Url(new TextEncoder().encode(JSON.stringify(signedHeader)))
+  const payloadSegment = encodeBase64Url(new TextEncoder().encode(JSON.stringify(payload.value)))
+  const signingInput = `${headerSegment}.${payloadSegment}`
+
+  const signed = await signJwtWithPrivateKey(algorithm, signingInput, input.privateKeyPem ?? '')
+  if (!signed.ok) {
+    return { ok: false, reason: signed.reason }
+  }
+  return {
+    ok: true,
+    token: `${signingInput}.${signed.token}`,
+    header: signedHeader,
+    payload: payload.value,
+    publicJwkJson: signed.publicJwkJson,
   }
 }

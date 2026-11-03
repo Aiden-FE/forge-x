@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 票据：.scratch/hot-tools-v0.4.0/issues/05-aes-cipher-spec.md 验收 8（及 UI 可断言项）
 // - 加密 → 复制 → 清空 → 粘贴 → 解密还原 → 改一位密文 → 失败单态
 // - 信封解析面板各段 / 非 FGX1 提示 / CBC 常驻警示 / raw key 字段级错误 / 1 MiB 边界

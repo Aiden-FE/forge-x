@@ -16,9 +16,10 @@
  *
  * Semantics (see .scratch/hot-tools-v0.3.0/issues/13-markdown-html-spec.md):
  * - GFM full set: tables, task list checkboxes, strikethrough, autolinks,
- *   fenced code blocks. No footnotes, no syntax highlighting — fenced code
- *   renders as bare `<pre><code>` (a custom renderer strips the language
- *   class; no highlighter is ever loaded).
+ *   fenced code blocks. No footnotes. Fenced code renders as bare
+ *   `<pre><code>` on THIS module's paths — the 13-ticket preview-only syntax
+ *   highlighting lives in highlight.ts and never touches copy/download
+ *   output (输出即语义: output carries no hljs markup).
  * - html→md keeps content structure (headings, lists, tables, links, images,
  *   code, quotes, emphasis); style/layout info (class/style/div wrappers) is
  *   dropped; unknown tags pass through their text content without errors.

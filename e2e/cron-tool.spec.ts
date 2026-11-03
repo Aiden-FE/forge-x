@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 输入有 300ms 防抖，断言均交给 toBeVisible/toHaveText 的自动重试。
 async function openTool(page: import('@playwright/test').Page) {
   await page.goto('/#/tool/cron-tool')

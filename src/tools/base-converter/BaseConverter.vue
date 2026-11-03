@@ -90,12 +90,70 @@
           <span v-else class="char-none" data-test="char-none">{{ t('baseConverter.charNone') }}</span>
         </div>
       </section>
+
+      <!-- 位视图：固定位宽位格 + 补码双解读 + 字节序对照，跟随主输入整数值实时联动 -->
+      <section class="panel" data-test="bit-view">
+        <div class="bit-head">
+          <h2 class="section-title">{{ t('baseConverter.bitView') }}</h2>
+          <div class="seg" role="group" :aria-label="t('baseConverter.bitWidthLabel')" data-test="bit-widths">
+            <button
+              v-for="w in BIT_WIDTHS"
+              :key="w"
+              type="button"
+              class="seg-btn"
+              :class="{ active: bitWidth === w }"
+              :data-test="`bit-width-${w}`"
+              @click="bitWidth = w"
+            >
+              {{ w }} bit
+            </button>
+          </div>
+        </div>
+        <p v-if="bitError" class="error" data-test="bit-range-error">
+          {{ t('baseConverter.bitRangeError', { width: String(bitWidth) }) }}
+        </p>
+        <template v-if="bitDisplay">
+          <div class="bit-grid" data-test="bit-grid">
+            <template v-for="(group, gi) in bitGroups" :key="gi">
+              <span v-if="gi > 0" class="bit-gap" aria-hidden="true" />
+              <span
+                v-for="(b, bi) in group"
+                :key="bi"
+                class="bit-cell mono"
+                :class="{ on: b === 1 }"
+                data-test="bit-cell"
+              >{{ b }}</span>
+            </template>
+          </div>
+          <div class="bit-readout">
+            <span class="readout" data-test="bit-signed">
+              <span class="readout-label">{{ t('baseConverter.bitSigned') }}</span>
+              <b class="mono">{{ bitDisplay.signed }}</b>
+            </span>
+            <span class="readout" data-test="bit-unsigned">
+              <span class="readout-label">{{ t('baseConverter.bitUnsigned') }}</span>
+              <b class="mono">{{ bitDisplay.unsigned }}</b>
+            </span>
+          </div>
+          <div class="bit-bytes">
+            <span class="readout" data-test="bit-bytes-be">
+              <span class="readout-label">{{ t('baseConverter.bitBytesBE') }}</span>
+              <span class="mono bytes" data-test="bit-be-value">{{ bitDisplay.bytesBE.join(' ') }}</span>
+            </span>
+            <span class="readout" data-test="bit-bytes-le">
+              <span class="readout-label">{{ t('baseConverter.bitBytesLE') }}</span>
+              <span class="mono bytes" data-test="bit-le-value">{{ bitDisplay.bytesLE.join(' ') }}</span>
+            </span>
+          </div>
+        </template>
+        <p v-else-if="!bitError" class="hint" data-test="bit-empty">{{ t('baseConverter.bitEmpty') }}</p>
+      </section>
     </div>
   </ToolLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
@@ -109,6 +167,8 @@ import {
   normalizeRadix,
   parseIntInRadix,
 } from './base'
+import { BIT_WIDTHS, DEFAULT_BIT_WIDTH, bitView } from './bitview'
+import type { BitView, BitWidth } from './bitview'
 import type { ConverterState, FieldKey } from './base'
 
 const { t } = useI18n()
@@ -120,7 +180,7 @@ const toolMeta: ToolMeta = {
   category: 'encode',
   icon: 'Hash',
   component: BaseConverter,
-  keywords: ['base', 'radix', 'binary', 'hex', 'octal', 'bigint', '进制', '二进制', '十六进制'],
+  keywords: ['base', 'radix', 'binary', 'hex', 'octal', 'bigint', 'bit view', 'two complement', 'endianness', '进制', '二进制', '十六进制', '位视图', '补码', '字节序'],
 }
 
 const FIXED_FIELDS: { key: Exclude<FieldKey, 'custom'>; label: string; radix: number }[] = [
@@ -240,6 +300,37 @@ const queuedFieldApplies: Record<FieldKey, () => void> = {
 function onFieldInput(key: FieldKey): void {
   queuedFieldApplies[key]()
 }
+
+// ---- 位视图（跟随主输入整数值实时联动） ----
+
+const bitWidth = ref<BitWidth>(DEFAULT_BIT_WIDTH)
+
+/** 上一次合法位视图：范围错误只错该区块，位格保留旧值（非法输入只错该处）。 */
+const bitDisplay = ref<BitView | null>(null)
+
+const bitError = computed(() => {
+  if (value.value === null) return false
+  return !bitView(value.value, bitWidth.value).ok
+})
+
+watch([value, bitWidth], () => {
+  const v = value.value
+  if (v === null) {
+    bitDisplay.value = null
+    return
+  }
+  const res = bitView(v, bitWidth.value)
+  if (res.ok) bitDisplay.value = res.view
+}, { immediate: true })
+
+/** 位格按 4 位分组（MSB → LSB）。 */
+const bitGroups = computed(() => {
+  const view = bitDisplay.value
+  if (!view) return []
+  const groups: number[][] = []
+  for (let i = 0; i < view.bits.length; i += 4) groups.push(view.bits.slice(i, i + 4))
+  return groups
+})
 
 // ---- 码点联动行 ----
 
@@ -399,5 +490,104 @@ const charLabel = computed(() => {
 .char-none {
   font-size: 13px;
   color: var(--text-quaternary);
+}
+
+.bit-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.seg-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.seg-btn + .seg-btn {
+  border-left: 1px solid var(--border);
+}
+
+.seg-btn:hover {
+  background: var(--bg-hover);
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.bit-grid {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.bit-gap {
+  width: 10px;
+}
+
+.bit-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 30px;
+  font-size: 14px;
+  color: var(--text-quaternary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.bit-cell.on {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  font-weight: 590;
+}
+
+.bit-readout,
+.bit-bytes {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.readout-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.readout .mono,
+.bytes {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-quaternary);
+  margin: 0;
 }
 </style>

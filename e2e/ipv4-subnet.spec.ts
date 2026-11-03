@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 输入有 300ms 防抖，断言均交给 toBeVisible/toHaveText 的自动重试。
 async function openTool(page: import('@playwright/test').Page) {
   await page.goto('/#/tool/ipv4-subnet')
@@ -106,6 +110,8 @@ test.describe('IPv4 子网计算 e2e', () => {
     // 点击行复制 CIDR（chromium：clipboard-write 可授权）
     test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.fill('[data-test="subnet-input"]', '10.0.0.0/24')
+    // splitCount 仍是上一步选的 1024（/24 切 1024 超上限不出行），先恢复 4
+    await page.selectOption('[data-test="split-count"]', '4')
     await expect(page.locator('[data-test="split-cidr-1"]')).toHaveText('10.0.0.64/26')
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.click('[data-test="split-row-1"]')

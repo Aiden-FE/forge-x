@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 输入有 300ms 防抖，断言均交给 toBeVisible/toHaveText 的自动重试。
 async function openTool(page: import('@playwright/test').Page) {
   await page.goto('/#/tool/math-eval')
@@ -19,9 +23,9 @@ test.describe('数学表达式求值 e2e', () => {
     await expect(page.locator('[data-test="math-result-1"]')).toHaveText('10')
     // 浮点如实：完整位数
     await expect(page.locator('[data-test="math-result-2"]')).toHaveText('0.30000000000000004')
-    // ∞ / NaN 特殊呈现
-    await expect(page.locator('[data-test="math-result-3"]')).toHaveText('∞')
-    await expect(page.locator('[data-test="math-result-4"]')).toHaveText('NaN')
+    // ∞ / NaN 特殊呈现（特殊值附带本地化名称小字，故用 containText）
+    await expect(page.locator('[data-test="math-result-3"]')).toContainText('∞')
+    await expect(page.locator('[data-test="math-result-4"]')).toContainText('NaN')
     // undefined 变量只红该行（最后一行），他行结果保留
     await expect(page.locator('[data-test="math-error-5"]')).toContainText('y')
     await expect(page.locator('[data-test="math-row-5"]')).toHaveClass(/invalid/)

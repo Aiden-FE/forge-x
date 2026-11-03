@@ -1,14 +1,16 @@
 /// <reference types="node" />
-import { createHmac } from 'node:crypto'
+import { createHmac, generateKeyPairSync } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   applyJwtTimePreset,
   decodeJwt,
+  derivePublicJwkJson,
   ecdsaJwtSignatureToWebCrypto,
   ecdsaWebCryptoSignatureToJwt,
   generateJwt,
   jwtPresetUnixSeconds,
   parseJwtJsonObject,
+  parsePemPrivateKey,
   verifyJwt,
 } from './jwt'
 
@@ -354,5 +356,212 @@ describe('generateJwt', () => {
   it('空 secret 返回 empty-secret', async () => {
     await expect(generateJwt({ headerText, payloadText, secret: '   ' }))
       .resolves.toEqual({ ok: false, reason: 'empty-secret' })
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * 13 票扩展：RS256 / ES256 非对称签发（PKCS#8 PEM → 签发 → 既有验签区闭环）
+ * ------------------------------------------------------------------ */
+
+function pemEncode(der: Uint8Array, label: string): string {
+  const base64 = Buffer.from(der).toString('base64')
+  const lines = base64.match(/.{1,64}/g) ?? []
+  return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`
+}
+
+async function exportPkcs8Pem(key: CryptoKey): Promise<string> {
+  const der = new Uint8Array(await crypto.subtle.exportKey('pkcs8', key))
+  return pemEncode(der, 'PRIVATE KEY')
+}
+
+async function generateAsymmetricKeyPair(algorithm: 'RS256' | 'ES256'): Promise<CryptoKeyPair> {
+  return crypto.subtle.generateKey(
+    algorithm === 'RS256'
+      ? {
+          name: 'RSASSA-PKCS1-v1_5',
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: 'SHA-256',
+        }
+      : { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  )
+}
+
+describe('parsePemPrivateKey（PKCS#8 口径）', () => {
+  it('接受 PKCS#8（BEGIN PRIVATE KEY）并剥壳出 DER', async () => {
+    const keyPair = await generateAsymmetricKeyPair('ES256')
+    const pem = await exportPkcs8Pem(keyPair.privateKey)
+    const result = parsePemPrivateKey(pem)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.der.length).toBeGreaterThan(0)
+      expect(result.der[0]).toBe(0x30) // DER SEQUENCE
+    }
+  })
+
+  it('PKCS#1（BEGIN RSA PRIVATE KEY）定位报错 pkcs1', () => {
+    const pkcs1 = generateKeyPairSync('rsa', { modulusLength: 2048 })
+      .privateKey.export({ type: 'pkcs1', format: 'pem' })
+      .toString()
+    expect(parsePemPrivateKey(pkcs1)).toEqual({ ok: false, reason: 'pkcs1' })
+  })
+
+  it('SEC1（BEGIN EC PRIVATE KEY）同样定位报错 pkcs1', () => {
+    const sec1 = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+      .privateKey.export({ type: 'sec1', format: 'pem' })
+      .toString()
+    expect(parsePemPrivateKey(sec1)).toEqual({ ok: false, reason: 'pkcs1' })
+  })
+
+  it('加密 PEM（ENCRYPTED PRIVATE KEY）定位报错 encrypted（超出口径）', () => {
+    const fake = '-----BEGIN ENCRYPTED PRIVATE KEY-----\nZmFrZQ==\n-----END ENCRYPTED PRIVATE KEY-----'
+    expect(parsePemPrivateKey(fake)).toEqual({ ok: false, reason: 'encrypted' })
+  })
+
+  it('空输入与非法 PEM 分别为 empty / format', () => {
+    expect(parsePemPrivateKey('   ')).toEqual({ ok: false, reason: 'empty' })
+    expect(parsePemPrivateKey('not a pem at all')).toEqual({ ok: false, reason: 'format' })
+    expect(parsePemPrivateKey('-----BEGIN PUBLIC KEY-----\nZmFrZQ==\n-----END PUBLIC KEY-----'))
+      .toEqual({ ok: false, reason: 'format' })
+    expect(parsePemPrivateKey('-----BEGIN PRIVATE KEY-----\n!!!not-base64!!!\n-----END PRIVATE KEY-----'))
+      .toEqual({ ok: false, reason: 'format' })
+  })
+})
+
+describe.each(['RS256', 'ES256'] as const)('generateJwt 非对称（%s）', (algorithm) => {
+  const headerText = '{"alg":"HS256","typ":"JWT"}' // 故意不匹配：签发时应覆写为所选算法
+  const payloadText = '{"sub":"asym-user","exp":4102444800}'
+
+  async function generateOk(pem: string) {
+    const result = await generateJwt({
+      headerText,
+      payloadText,
+      algorithm,
+      secret: '',
+      privateKeyPem: pem,
+    })
+    if (!result.ok) throw new Error(`expected ok, got ${result.reason}`)
+    return result
+  }
+
+  it('PKCS#8 PEM 签发成功：header alg 覆写为所选算法，token 三段式且 base64url 无填充', async () => {
+    const keyPair = await generateAsymmetricKeyPair(algorithm)
+    const result = await generateOk(await exportPkcs8Pem(keyPair.privateKey))
+
+    expect(result.header).toMatchObject({ alg: algorithm, typ: 'JWT' })
+    const segments = result.token.split('.')
+    expect(segments).toHaveLength(3)
+    for (const segment of segments) {
+      expect(segment).not.toMatch(/[=+/]/)
+    }
+  })
+
+  it('签发 → 派生公钥 JWK → 既有 verifyJwt 闭环验签通过（桥接路径）', async () => {
+    const keyPair = await generateAsymmetricKeyPair(algorithm)
+    const result = await generateOk(await exportPkcs8Pem(keyPair.privateKey))
+
+    expect(result.publicJwkJson).toBeDefined()
+    const publicJwk = JSON.parse(result.publicJwkJson!) as JsonWebKey
+    expect(publicJwk.kty).toBe(algorithm === 'RS256' ? 'RSA' : 'EC')
+    expect(publicJwk.d).toBeUndefined() // 只含公钥分量
+
+    await expect(verifyJwt(result.token, result.publicJwkJson!)).resolves.toEqual({
+      ok: true,
+      valid: true,
+    })
+  })
+
+  it('篡改 payload 后验签失败', async () => {
+    const keyPair = await generateAsymmetricKeyPair(algorithm)
+    const result = await generateOk(await exportPkcs8Pem(keyPair.privateKey))
+
+    const [headerSegment, , signatureSegment] = result.token.split('.')
+    const tamperedPayload = encodeBase64Url(JSON.stringify({ sub: 'attacker', exp: 4102444800 }))
+    const tampered = `${headerSegment}.${tamperedPayload}.${signatureSegment}`
+
+    await expect(verifyJwt(tampered, result.publicJwkJson!)).resolves.toEqual({
+      ok: true,
+      valid: false,
+    })
+  })
+
+  it('缺 PEM / 非法 PEM / PKCS#1 分别定位为 pem-empty / pem-format / pem-pkcs1', async () => {
+    const pkcs1 =
+      algorithm === 'RS256'
+        ? generateKeyPairSync('rsa', { modulusLength: 2048 })
+            .privateKey.export({ type: 'pkcs1', format: 'pem' })
+            .toString()
+        : generateKeyPairSync('ec', { namedCurve: 'P-256' })
+            .privateKey.export({ type: 'sec1', format: 'pem' })
+            .toString()
+
+    await expect(
+      generateJwt({ headerText, payloadText, algorithm, secret: '', privateKeyPem: '  ' }),
+    ).resolves.toEqual({ ok: false, reason: 'pem-empty' })
+    await expect(
+      generateJwt({ headerText, payloadText, algorithm, secret: '', privateKeyPem: 'not-a-pem' }),
+    ).resolves.toEqual({ ok: false, reason: 'pem-format' })
+    await expect(
+      generateJwt({ headerText, payloadText, algorithm, secret: '', privateKeyPem: pkcs1 }),
+    ).resolves.toEqual({ ok: false, reason: 'pem-pkcs1' })
+  })
+
+  it('密钥体与算法不匹配（EC PEM 选 RS256）定位为 pem-import', async () => {
+    if (algorithm !== 'RS256') return
+    const ecPair = await generateAsymmetricKeyPair('ES256')
+    await expect(
+      generateJwt({
+        headerText,
+        payloadText,
+        algorithm,
+        secret: '',
+        privateKeyPem: await exportPkcs8Pem(ecPair.privateKey),
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'pem-import' })
+  })
+
+  it('exp/iat 助手与 HS256 分支共用：快捷 claims 按输入序列化进非对称 token', async () => {
+    const keyPair = await generateAsymmetricKeyPair(algorithm)
+    const nowMs = 1_700_000_000_000
+    const payload = applyJwtTimePreset({ sub: 'asym-user' }, 'iat', 'now', nowMs)
+    const result = await generateJwt({
+      headerText,
+      payloadText: JSON.stringify(payload),
+      algorithm,
+      secret: '',
+      privateKeyPem: await exportPkcs8Pem(keyPair.privateKey),
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const header = decodeJwt(result.token)
+      expect(header.ok).toBe(true)
+      if (header.ok) {
+        expect(header.payload).toMatchObject({ iat: 1_700_000_000, sub: 'asym-user' })
+      }
+    }
+  })
+})
+
+describe('derivePublicJwkJson（用公钥验签桥接的数据来源）', () => {
+  it('RSA 派生结果只含公钥分量，可被验签路径按 JWK 导入', async () => {
+    const keyPair = await generateAsymmetricKeyPair('RS256')
+    const json = await derivePublicJwkJson(keyPair.privateKey)
+    const jwk = JSON.parse(json) as JsonWebKey
+    expect(jwk).toMatchObject({ kty: 'RSA', alg: 'RS256' })
+    expect(jwk.n).toBeTruthy()
+    expect(jwk.e).toBeTruthy()
+    expect(jwk.d).toBeUndefined()
+  })
+
+  it('EC 派生结果只含公钥分量（crv/x/y）', async () => {
+    const keyPair = await generateAsymmetricKeyPair('ES256')
+    const json = await derivePublicJwkJson(keyPair.privateKey)
+    const jwk = JSON.parse(json) as JsonWebKey
+    expect(jwk).toMatchObject({ kty: 'EC', alg: 'ES256', crv: 'P-256' })
+    expect(jwk.x).toBeTruthy()
+    expect(jwk.y).toBeTruthy()
+    expect(jwk.d).toBeUndefined()
   })
 })

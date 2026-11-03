@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 300ms 实时防抖（Worker 执行），断言交给 toHaveValue 自动重试。
 // 主线程零阻塞（1 MiB Worker 内 < 2s）为规格手动验收项，自动化不覆盖。
 async function openTool(page: import('@playwright/test').Page) {
@@ -17,9 +21,10 @@ test.describe('SQL 格式化 e2e', () => {
     await expect(page.locator('[data-test="sql-output"]')).toHaveValue(/SELECT\n  user_id,\n  name\nFROM/)
     await expect(page.locator('[data-test="sql-error"]')).toHaveCount(0)
 
-    // 方言切换：T-SQL 的 LIMIT 与 DESC 同行（标准 SQL 折行），输出随方言变化
+    // 方言切换：标准 SQL 折行 LIMIT；T-SQL 不识别 LIMIT 关键字（按标识符原样小写、
+    // 与 DESC 同行），输出随方言变化（sql-formatter 15.9 实际行为）
     await page.selectOption('[data-test="sql-dialect"]', 'transactsql')
-    await expect(page.locator('[data-test="sql-output"]')).toHaveValue(/created_at DESC LIMIT 10;/)
+    await expect(page.locator('[data-test="sql-output"]')).toHaveValue(/created_at DESC limit 10;/)
 
     // 缩进宽度 4：行前缀由 2 空格变 4 空格
     await page.selectOption('[data-test="sql-indent"]', '4')
@@ -51,6 +56,8 @@ test.describe('SQL 格式化 e2e', () => {
 
   test('复制输出（含复制语义正确）', async ({ page }) => {
     await openTool(page)
+  // clipboard-write 仅 chromium 可授权（webkit 不支持该权限，仓库既有惯例）
+  test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.fill('[data-test="sql-input"]', 'select 42')
     await expect(page.locator('[data-test="sql-output"]')).toHaveValue(/42/)

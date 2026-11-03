@@ -8,5 +8,5 @@ export default {
   category: 'text',
   icon: 'ChartNoAxesColumn',
   component: defineAsyncComponent(() => import('./TextStats.vue')),
-  keywords: ['text', 'stats', 'word count', 'character', 'reading time', '字数', '统计'],
+  keywords: ['text', 'stats', 'word count', 'character', 'reading time', 'word frequency', 'top-n', '字数', '统计', '词频'],
 } satisfies ToolMeta

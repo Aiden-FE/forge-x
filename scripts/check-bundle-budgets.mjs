@@ -19,7 +19,10 @@ const VENDOR_BUDGETS_KB = {
   'vendor-expr-eval': 10,
   'vendor-cron-parser': 50,
   'vendor-cronstrue': 50,
-  'vendor-hljs': 50,
+  // hljs lib/common measures 53.7 KB gz on highlight.js 11.12.0 (research's
+  // 43.5 KB was an older build); the fixed 37-language set is spec-pinned
+  // and load-on-touch keeps it zero-cost until a code block appears.
+  'vendor-hljs': 60,
   'vendor-cropperjs': 50,
   'vendor-bcryptjs': 50, // hosted inside the bcrypt worker bundle
 }
@@ -88,6 +91,7 @@ if (vendorInEntry.length > 0) {
 // --- Per-vendor budgets ------------------------------------------------------
 const seenVendors = new Set()
 for (const [key, chunk] of Object.entries(manifest)) {
+  if (!chunk.file.endsWith('.js')) continue // css vendor assets carry no JS budget
   const name = vendorBudgetName(chunk.file)
   if (!name) continue
   seenVendors.add(name)

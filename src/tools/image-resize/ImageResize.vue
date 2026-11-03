@@ -36,8 +36,9 @@
         </template>
       </div>
 
-      <!-- 设置面板：输出格式 + 缩放模式 + 质量 -->
+      <!-- 设置面板：输出格式 + 缩放模式 + 质量（管线后段：批量级参数） -->
       <div class="settings" data-test="settings">
+        <p class="notice pipeline-hint" data-test="pipeline-hint">{{ t('imageResize.pipelineHint') }}</p>
         <div class="setting-row">
           <span class="setting-label">{{ t('imageResize.outputFormat') }}</span>
           <div class="seg" role="group">
@@ -251,6 +252,9 @@
               <span v-if="row.stretch" class="badge" data-test="row-stretch">
                 {{ t('imageResize.stretchBadge', { sx: String(row.stretch.x), sy: String(row.stretch.y) }) }}
               </span>
+              <span v-if="row.crop" class="badge" data-test="row-cropped">
+                {{ t('imageResize.croppedBadge', { w: String(row.crop.width), h: String(row.crop.height) }) }}
+              </span>
             </div>
             <div v-if="row.status === 'success'" class="row-meta">
               <span class="sizes" data-test="row-sizes">
@@ -268,6 +272,37 @@
               {{ t('imageResize.converting') }}
             </div>
             <div v-else class="row-error" data-test="row-error">{{ row.error }}</div>
+            <!-- 管线前段（文件级）：裁剪 → 旋转；缩放/质量为批量级参数（上方设置面板） -->
+            <div class="row-stage" data-test="row-stage">
+              <button class="stage-btn" type="button" data-test="row-crop-btn" @click="openCropper(row)">
+                <Crop :size="14" />
+                {{ row.crop ? t('imageResize.editCrop') : t('imageResize.cropBtn') }}
+              </button>
+              <button
+                v-if="row.crop"
+                class="stage-btn danger"
+                type="button"
+                data-test="row-clear-crop"
+                @click="clearCrop(row)"
+              >
+                <X :size="14" />
+                {{ t('imageResize.clearCrop') }}
+              </button>
+              <span class="stage-label">{{ t('imageResize.rotateLabel') }}</span>
+              <div class="rot-group" role="group" :aria-label="t('imageResize.rotateLabel')" :data-test="`rot-${row.id}`">
+                <button
+                  v-for="r in ROTATIONS"
+                  :key="r"
+                  type="button"
+                  class="rot-btn"
+                  :class="{ active: (row.rotation ?? 0) === r }"
+                  :data-test="`row-rot-${r}`"
+                  @click="setRotation(row, r)"
+                >
+                  {{ r }}°
+                </button>
+              </div>
+            </div>
           </div>
           <div class="row-actions">
             <button
@@ -290,16 +325,39 @@
           </div>
         </div>
       </div>
+      <!-- 裁剪器（触达加载：打开才 import cropperjs） -->
+      <div v-if="cropperState" class="crop-overlay" data-test="crop-overlay">
+        <div class="crop-modal">
+          <p class="crop-title" data-test="crop-title">
+            {{ t('imageResize.cropTitle', { name: cropperState.row.originalName }) }}
+          </p>
+          <div class="crop-container">
+            <img ref="cropperImg" :src="cropperState.url" :alt="cropperState.row.originalName" data-test="crop-image" />
+          </div>
+          <div class="crop-actions">
+            <button class="btn primary" type="button" data-test="crop-confirm" :disabled="!cropperReady" @click="confirmCrop">
+              <Check :size="16" />
+              {{ t('imageResize.cropConfirm') }}
+            </button>
+            <button class="btn" type="button" data-test="crop-cancel" @click="closeCropper">
+              <X :size="16" />
+              {{ t('imageResize.cropCancel') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </ToolLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, markRaw, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, markRaw, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import type JSZipType from 'jszip'
 import {
   AlertTriangle,
   Archive,
+  Check,
+  Crop,
   Download,
   ImageOff,
   Loader2,
@@ -315,6 +373,8 @@ import ImageResize from './ImageResize.vue'
 import type { OutputFormat } from './encode'
 import { OUTPUT_EXT, needsQuality } from './encode'
 import { ConversionError } from './errors'
+import type { CropRect, ImageEdit, Rotation } from './edit'
+import { ROTATIONS, hasEdit } from './edit'
 import { allocateOutputName } from './naming'
 import type { ConvertOutcome } from './pipeline'
 import { browserCodec, convertImage } from './pipeline'
@@ -340,7 +400,7 @@ const toolMeta: ToolMeta = {
   category: 'convert',
   icon: 'Scaling',
   component: ImageResize,
-  keywords: ['image', 'resize', 'compress', 'scale', 'png', 'jpeg', 'webp', '图片', '缩放', '压缩'],
+  keywords: ['image', 'resize', 'compress', 'scale', 'png', 'jpeg', 'webp', 'crop', 'rotate', '图片', '缩放', '压缩', '裁剪', '旋转'],
 }
 
 interface Row {
@@ -357,13 +417,17 @@ interface Row {
   originalDims?: { w: number; h: number }
   convertedDims?: { w: number; h: number }
   firstFrame?: boolean
-  /** 本次成功所用的设置快照（输出格式 + 质量 + 缩放计划），变更后提示重新转换 */
+  /** 本次成功所用的设置快照（批量参数 + 本行文件级编辑），变更后提示重新转换 */
   appliedSettings?: string
   /** 解锁非等比拉伸时的尺寸变化比（x = 宽变化，y = 高变化） */
   stretch?: { x: number; y: number } | null
+  /** 文件级裁剪框（解码原图像素坐标）；undefined = 未裁剪 */
+  crop?: CropRect
+  /** 文件级旋转（90° 步进，顺时针） */
+  rotation: Rotation
   blob?: Blob
   thumbnailUrl?: string
-  /** 保留解码产物供重新转换 */
+  /** 保留解码原图供重新转换（编辑段按最新参数重新应用） */
   source?: HTMLCanvasElement
 }
 
@@ -410,19 +474,20 @@ function currentPlan(): ResizePlan {
 /** 目标尺寸非法（0/负/超 65500 单边）→ 错误态 */
 const planInvalid = computed(() => !validatePlan(currentPlan()).ok)
 
-function settingsSnapshot(plan: ResizePlan, format: OutputFormat, q: number): string {
-  return JSON.stringify({
-    f: format,
-    q: needsQuality(format) ? q : null,
-    p: plan,
-  })
+/** 批量参数快照（输出格式 + 质量 + 缩放计划）。 */
+function batchSettingsSnapshot(plan: ResizePlan, format: OutputFormat, q: number): string {
+  return JSON.stringify({ f: format, q: needsQuality(format) ? q : null, p: plan })
 }
 
-/** 存在「已成功但设置已变更」的行 → 显示重新转换提示（手动，不自动触发） */
+/** 行级生效参数快照：批量参数 + 本行文件级编辑（裁剪/旋转）。 */
+function rowSnapshot(row: Row, batch: string): string {
+  return JSON.stringify({ b: batch, c: row.crop ?? null, r: row.rotation })
+}
+
+/** 存在「已成功但设置（批量或本行文件级）已变更」的行 → 显示重新转换提示（手动，不自动触发） */
 const pendingReconvert = computed(() => {
-  const plan = currentPlan()
-  const current = settingsSnapshot(plan, outputFormat.value, quality.value)
-  return rows.value.some((r) => r.status === 'success' && r.appliedSettings !== current)
+  const batch = batchSettingsSnapshot(currentPlan(), outputFormat.value, quality.value)
+  return rows.value.some((r) => r.status === 'success' && r.appliedSettings !== rowSnapshot(r, batch))
 })
 
 const REASON_KEYS: Record<FailureReason, string> = {
@@ -448,6 +513,7 @@ function makeRow(file: File, outputName: string): Row {
     outputName,
     status: 'converting' as const,
     originalSize: file.size,
+    rotation: 0 as Rotation,
   }) as Row
 }
 
@@ -484,10 +550,11 @@ async function convertRow(row: Row) {
   row.status = 'converting'
   const plan = currentPlan()
   const format = outputFormat.value
+  const edit: ImageEdit = { crop: row.crop, rotation: row.rotation }
   try {
-    const outcome = await convertImage(browserCodec, row.file, plan, format, quality.value)
+    const outcome = await convertImage(browserCodec, row.file, plan, format, quality.value, edit)
     if (disposed) return
-    applySuccess(row, outcome, plan, settingsSnapshot(plan, format, quality.value))
+    applySuccess(row, outcome, plan, rowSnapshot(row, batchSettingsSnapshot(plan, format, quality.value)))
   } catch (e) {
     if (disposed) return
     const reason = e instanceof ConversionError ? e.reason : 'decode-failed'
@@ -548,13 +615,13 @@ function onHeightEdited() {
   widthInput.value = linkPair(referenceDims.value.w, referenceDims.value.h, 'height', h).width
 }
 
-/** 重新转换：仅重编码当前成功的文件，名称不变；失败文件不动 */
+/** 重新转换：仅重编码当前成功的文件，名称不变；失败文件不动。编辑段按本行最新裁剪/旋转重新应用。 */
 async function reconvert() {
   const plan = currentPlan()
   if (!validatePlan(plan).ok) return
   const format = outputFormat.value
   const q = needsQuality(format) ? quality.value : null
-  const applied = settingsSnapshot(plan, format, quality.value)
+  const batch = batchSettingsSnapshot(plan, format, quality.value)
   const targets = rows.value.filter(
     (r): r is Row & { source: HTMLCanvasElement; originalDims: { w: number; h: number } } =>
       r.status === 'success' && !!r.source && !!r.originalDims,
@@ -563,13 +630,20 @@ async function reconvert() {
   reconverting.value = true
   for (const row of targets) {
     row.status = 'converting'
-    const source = row.source
-    const dims = row.originalDims
     const firstFrame = row.firstFrame ?? false
     try {
-      const target = computeTargetSize({ width: dims.w, height: dims.h }, plan)
+      // 编辑段（管线前段）：按本行最新的文件级参数，从解码原图重新应用
+      const edit: ImageEdit = { crop: row.crop, rotation: row.rotation }
+      let workSource: CanvasImageSource = row.source
+      let dims = { width: row.originalDims.w, height: row.originalDims.h }
+      if (hasEdit(edit)) {
+        const edited = await browserCodec.edit!(workSource, dims.width, dims.height, edit)
+        workSource = edited.source
+        dims = { width: edited.width, height: edited.height }
+      }
+      const target = computeTargetSize(dims, plan)
       if (!target.ok) throw new ConversionError('invalid-target-size')
-      const blob = await browserCodec.encode(source, target.width, target.height, format, q)
+      const blob = await browserCodec.encode(workSource, target.width, target.height, format, q)
       if (disposed) return
       applySuccess(
         row,
@@ -577,13 +651,13 @@ async function reconvert() {
           blob,
           width: target.width,
           height: target.height,
-          sourceWidth: dims.w,
-          sourceHeight: dims.h,
-          source,
+          sourceWidth: row.originalDims.w,
+          sourceHeight: row.originalDims.h,
+          source: row.source,
           firstFrame,
         },
         plan,
-        applied,
+        rowSnapshot(row, batch),
       )
     } catch (e) {
       if (disposed) return
@@ -605,6 +679,69 @@ function removeRow(row: Row) {
   usedNames.delete(row.outputName)
   const i = rows.value.findIndex((r) => r.id === row.id)
   if (i >= 0) rows.value.splice(i, 1)
+}
+
+/* ---------- 文件级编辑：裁剪（cropperjs 触达加载）与旋转 ---------- */
+
+function setRotation(row: Row, rotation: Rotation): void {
+  // 只改参数不动已展示结果（生成/转换非实时惯例）；重新转换提示按快照失配出现
+  row.rotation = rotation
+}
+
+function clearCrop(row: Row): void {
+  row.crop = undefined
+}
+
+/** 打开的裁剪器会话：目标行 + 原图 object URL（关闭时回收）。 */
+const cropperState = ref<{ row: Row; url: string } | null>(null)
+const cropperImg = ref<HTMLImageElement | null>(null)
+const cropperReady = ref(false)
+/** cropperjs v1 实例类型：从动态 import 的默认导出类取实例类型（触达加载，不静态 import 值）。 */
+type CropperInstance = InstanceType<(typeof import('cropperjs'))['default']>
+let cropperInstance: CropperInstance | null = null
+
+/** 打开裁剪器：此时才 dynamic import cropperjs 与其 CSS（触达加载，13 票口径）。 */
+async function openCropper(row: Row): Promise<void> {
+  if (cropperState.value) return
+  cropperState.value = { row, url: URL.createObjectURL(row.file) }
+  cropperReady.value = false
+  await nextTick()
+  const [{ default: Cropper }] = await Promise.all([
+    import('cropperjs'),
+    import('cropperjs/dist/cropper.css'),
+  ])
+  // 会话可能在加载期间被关闭/组件卸载
+  if (cropperState.value === null || disposed || !cropperImg.value) return
+  const existing = cropperState.value.row.crop
+  cropperInstance = new Cropper(cropperImg.value, {
+    viewMode: 1,
+    autoCropArea: 1,
+    background: false,
+    ready() {
+      cropperReady.value = true
+      // 重开编辑：恢复已有裁剪框（setData = 原图像素坐标的裁剪框数据，v1 API）
+      if (existing) cropperInstance?.setData(existing)
+    },
+  })
+}
+
+/** 确认裁剪：裁剪参数挂到该文件（已裁剪徽标），不立即重转换（非实时）。 */
+function confirmCrop(): void {
+  const state = cropperState.value
+  if (!state || !cropperInstance) return
+  const data = cropperInstance.getData(true) // 取整后的原图像素坐标
+  state.row.crop = { x: data.x, y: data.y, width: data.width, height: data.height }
+  closeCropper()
+}
+
+function closeCropper(): void {
+  cropperInstance?.destroy()
+  cropperInstance = null
+  cropperReady.value = false
+  if (cropperState.value) {
+    URL.revokeObjectURL(cropperState.value.url)
+    cropperState.value = null
+  }
 }
 
 function clearAll() {
@@ -642,6 +779,7 @@ async function downloadAll() {
 onBeforeUnmount(() => {
   disposed = true
   for (const row of rows.value) revokeRow(row)
+  closeCropper()
 })
 </script>
 
@@ -824,6 +962,11 @@ onBeforeUnmount(() => {
   color: var(--text-quaternary);
 }
 
+.pipeline-hint {
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -1001,6 +1144,124 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--space-xs);
   flex-shrink: 0;
+}
+
+/* 管线前段（文件级）：裁剪 → 旋转 */
+.row-stage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.stage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.stage-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.stage-btn.danger:hover {
+  color: var(--error);
+}
+
+.stage-label {
+  font-size: 12px;
+  color: var(--text-quaternary);
+  margin-left: var(--space-xs);
+}
+
+.rot-group {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.rot-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.rot-btn + .rot-btn {
+  border-left: 1px solid var(--border);
+}
+
+.rot-btn:hover {
+  background: var(--bg-hover);
+}
+
+.rot-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 裁剪器弹层 */
+.crop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  padding: var(--space-lg);
+}
+
+.crop-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  width: min(860px, 100%);
+  max-height: 90vh;
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.crop-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 510;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crop-container {
+  min-height: 320px;
+  max-height: 60vh;
+  overflow: hidden;
+}
+
+.crop-container img {
+  display: block;
+  max-width: 100%;
+}
+
+.crop-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
 }
 
 .mini-btn {

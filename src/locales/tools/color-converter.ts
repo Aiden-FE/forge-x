@@ -4,7 +4,7 @@ export default {
   'zh-CN': {
     tools: {
       'color-converter': '颜色转换器',
-      'color-converterDesc': 'HEX/RGB/HSL 互转、对比度检查与互补色',
+      'color-converterDesc': 'HEX/RGB/HSL 互转、对比度检查与六规则色板',
     },
     colorConverter: {
       pick: '点击选择颜色',
@@ -29,14 +29,26 @@ export default {
       levelAaaLarge: 'AAA 大文本',
       pass: '通过',
       fail: '不通过',
-      complement: '互补色',
-      apply: '应用为当前色',
+      palette: {
+        title: '色板',
+        hint: '点击色块复制 HEX；悬停查看 HEX / RGB / HSL。六规则固定产出，不做数量调节。',
+        copyHex: '复制 HEX',
+        copied: '已复制 {{hex}}',
+        rules: {
+          complementary: '互补（2）',
+          analogous: '近似 ±30°（3）',
+          triadic: '三角 120°（3）',
+          'split-complementary': '分裂互补（3）',
+          tetradic: '四方（4）',
+          monochrome: '单色明暗（5）',
+        },
+      },
     },
   },
   en: {
     tools: {
       'color-converter': 'Color Converter',
-      'color-converterDesc': 'HEX/RGB/HSL conversion, WCAG contrast check and complementary color',
+      'color-converterDesc': 'HEX/RGB/HSL conversion, WCAG contrast check and the six-rule harmony palette',
     },
     colorConverter: {
       pick: 'Pick a color',
@@ -61,8 +73,20 @@ export default {
       levelAaaLarge: 'AAA large text',
       pass: 'Pass',
       fail: 'Fail',
-      complement: 'Complementary color',
-      apply: 'Apply as current color',
+      palette: {
+        title: 'Palette',
+        hint: 'Click a swatch to copy its HEX; hover for HEX / RGB / HSL. Six rules with fixed output counts.',
+        copyHex: 'Copy HEX',
+        copied: 'Copied {{hex}}',
+        rules: {
+          complementary: 'Complementary (2)',
+          analogous: 'Analogous ±30° (3)',
+          triadic: 'Triadic 120° (3)',
+          'split-complementary': 'Split-complementary (3)',
+          tetradic: 'Tetradic (4)',
+          monochrome: 'Monochrome (5)',
+        },
+      },
     },
   },
 } satisfies ToolLocaleFragment

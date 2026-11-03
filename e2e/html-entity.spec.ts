@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 300ms 实时防抖（DOMParser 主线程执行），断言交给自动重试。
 // e2e 主路径（验收 7）：粘贴 → 实时解码 → 切换方向 → 复制。
 async function openTool(page: import('@playwright/test').Page) {
@@ -45,6 +49,8 @@ test.describe('HTML 实体转义 e2e', () => {
 
   test('切换方向 → 同一输入即时按新方向重算；复制语义正确', async ({ page }) => {
     await openTool(page)
+  // clipboard-write 仅 chromium 可授权（webkit 不支持该权限，仓库既有惯例）
+  test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.fill('[data-test="he-input"]', '<b>')
     await expect(page.locator('[data-test="he-output"]')).toHaveValue('&lt;b&gt;')

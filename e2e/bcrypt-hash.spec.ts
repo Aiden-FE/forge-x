@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 票据：.scratch/hot-tools-v0.4.0/issues/03-bcrypt-spec.md 验收 8（及 UI 可断言项）
 // - 生成 → 复制 → 粘贴到校验 → 匹配；改一字 → 不匹配
 // - 格式非法三态 / 解析区四段 / cost 联动与秒级提示 / 72 字节截断警示

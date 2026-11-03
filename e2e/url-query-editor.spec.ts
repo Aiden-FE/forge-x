@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 300ms 实时防抖，断言交给自动重试。
 // e2e 主路径（验收 8）：粘贴 URL → 表格编辑 → 复制输出 → 粘贴回输入往返一致。
 async function openTool(page: import('@playwright/test').Page) {
@@ -76,6 +80,8 @@ test.describe('URL 查询编辑器 e2e', () => {
     )
 
     // 复制输出（剪贴板）→ 粘贴回输入：输出应保持不变（字节级往返一致）
+  // clipboard-write 仅 chromium 可授权（webkit 不支持该权限，仓库既有惯例）
+  test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.click('[data-test="uqe-copy"]')
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())

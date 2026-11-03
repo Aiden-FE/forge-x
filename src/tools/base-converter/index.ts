@@ -8,5 +8,5 @@ export default {
   category: 'encode',
   icon: 'Hash',
   component: defineAsyncComponent(() => import('./BaseConverter.vue')),
-  keywords: ['base', 'radix', 'binary', 'hex', 'octal', 'bigint', '进制', '二进制', '十六进制'],
+  keywords: ['base', 'radix', 'binary', 'hex', 'octal', 'bigint', 'bit view', 'two complement', 'endianness', '进制', '二进制', '十六进制', '位视图', '补码', '字节序'],
 } satisfies ToolMeta

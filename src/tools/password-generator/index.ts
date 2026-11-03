@@ -8,5 +8,5 @@ export default {
   category: 'generate',
   icon: 'KeyRound',
   component: defineAsyncComponent(() => import('./PasswordGenerator.vue')),
-  keywords: ['密码', 'password', '生成', '强度', 'entropy', '随机', '口令'],
+  keywords: ['密码', 'password', '生成', '强度', 'entropy', '随机', '口令', 'passphrase', '口令短语', 'PIN', '十六进制'],
 } satisfies ToolMeta

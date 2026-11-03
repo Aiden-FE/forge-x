@@ -98,3 +98,93 @@ test.describe('Text Stats e2e', () => {
     await expect(page.locator('[data-test="stat-graphemes"]')).toHaveCount(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// 词频 Top-N（票据 14 扩展 #1）
+//
+// 分词口径（CONTEXT.md）：按词 = Segmenter 词级切分（真词频）；按字 = CJK 逐字。
+// 运行时实测（Node 22 / Chromium 同族 ICU cjdict）：「人工智能」按词切为
+// 人工 + 智能（2 词）；按字逐字计 4。票面「1 词 vs 3 词」与任何真实 Segmenter
+// 都对不上（人工智能是 4 个汉字），按实测口径断言。
+// ---------------------------------------------------------------------------
+test.describe('词频 Top-N e2e', () => {
+  test('按词档：「人工智能」= 人工 + 智能 2 词，占比各 50%', async ({ page }) => {
+    await openTool(page)
+
+    await page.fill('[data-test="stats-input"]', '人工智能')
+    await expect(page.locator('[data-test="freq-row"]')).toHaveCount(2)
+    const rows = page.locator('[data-test="freq-row"]')
+    await expect(rows.nth(0)).toContainText('人工')
+    await expect(rows.nth(0)).toContainText('1')
+    await expect(rows.nth(0)).toContainText('50.0%')
+    await expect(rows.nth(1)).toContainText('智能')
+    await expect(page.locator('[data-test="freq-total"]')).toContainText('2')
+  })
+
+  test('口径切换按字：汉字逐字计 4 词，占比各 25%（与按词档不同）', async ({ page }) => {
+    await openTool(page)
+
+    await page.fill('[data-test="stats-input"]', '人工智能')
+    await expect(page.locator('[data-test="freq-row"]')).toHaveCount(2)
+
+    await page.click('[data-test="freq-mode-char"]')
+    const rows = page.locator('[data-test="freq-row"]')
+    await expect(rows).toHaveCount(4)
+    await expect(rows.nth(0)).toContainText('人')
+    await expect(rows.nth(1)).toContainText('工')
+    await expect(rows.nth(2)).toContainText('智')
+    await expect(rows.nth(3)).toContainText('能')
+    // 占比 = 频次 / 该口径总词数：4 字各 25%，合计 100%
+    for (let i = 0; i < 4; i++) await expect(rows.nth(i)).toContainText('25.0%')
+    await expect(page.locator('[data-test="freq-total"]')).toContainText('4')
+  })
+
+  test('拉丁词小写归一：The / THE 并入 the；纯拉丁两档等价', async ({ page }) => {
+    await openTool(page)
+
+    await page.fill('[data-test="stats-input"]', 'The cat THE dog the')
+    const rows = page.locator('[data-test="freq-row"]')
+    await expect(rows.nth(0)).toContainText('the')
+    await expect(rows.nth(0)).toContainText('3')
+    await expect(rows.nth(0)).toContainText('60.0%')
+
+    // 两档等价：切到按字，拉丁结果不变
+    await page.click('[data-test="freq-mode-char"]')
+    await expect(rows.nth(0)).toContainText('the')
+    await expect(rows.nth(0)).toContainText('3')
+    await expect(rows.nth(1)).toContainText('cat')
+    await expect(rows.nth(2)).toContainText('dog')
+  })
+
+  test('档位联动 10/20/50/100：截断不丢失总数依据（Top-N 外仍计入占比分母）', async ({ page }) => {
+    await openTool(page)
+
+    // 12 个不同单词：默认档 20 → 全部显示；切 10 → 只显示 10 行，总词数仍 12
+    const text = 'a b c d e f g h i j k l'
+    await page.fill('[data-test="stats-input"]', text)
+    await expect(page.locator('[data-test="freq-row"]')).toHaveCount(12)
+    await expect(page.locator('[data-test="freq-total"]')).toContainText('12')
+    // 默认档位 20 高亮
+    await expect(page.locator('[data-test="freq-tier-20"]')).toHaveClass(/active/)
+
+    await page.click('[data-test="freq-tier-10"]')
+    await expect(page.locator('[data-test="freq-row"]')).toHaveCount(10)
+    // 截断后总词数依据不变（仍是该口径全部词数）
+    await expect(page.locator('[data-test="freq-total"]')).toContainText('12')
+
+    await page.click('[data-test="freq-tier-50"]')
+    await expect(page.locator('[data-test="freq-row"]')).toHaveCount(12)
+    await expect(page.locator('[data-test="freq-tier-50"]')).toHaveClass(/active/)
+  })
+
+  test('点击词复制（chromium；clipboard-write 仅 chromium 可授权）', async ({ page }) => {
+    await openTool(page)
+    await page.fill('[data-test="stats-input"]', 'hello world hello')
+    const firstRow = page.locator('[data-test="freq-row"]').first()
+    await expect(firstRow).toContainText('hello')
+
+    test.skip(test.info().project.name !== 'chromium', 'clipboard-write 仅 chromium 可授权')
+    await firstRow.click()
+    await expect(firstRow).toHaveClass(/copied/)
+  })
+})

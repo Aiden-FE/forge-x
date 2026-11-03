@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// 断言中文文案：仓库惯例 test.use 锁定 zh-CN（navigator.language 决定默认 locale）
+test.use({ locale: 'zh-CN' })
+
+
 // 生成类非实时：显式「生成」按钮触发，控制只影响下一次生成。
 async function openTool(page: import('@playwright/test').Page) {
   await page.goto('/#/tool/test-data-generator')
@@ -82,10 +86,10 @@ test.describe('测试数据生成器 e2e', () => {
     const jsonText = (await import('node:fs/promises')).readFile(jsonPath!, 'utf-8')
     const parsed = JSON.parse(await jsonText) as Array<Record<string, string>>
     expect(parsed).toHaveLength(3)
-    // 键 = 字段名（界面语言标签），值一律字符串
+    // 键 = 字段名（界面语言标签：zh-CN 下 name=姓名、phone=手机号），值一律字符串
     const keys = Object.keys(parsed[0]!)
     expect(keys).toHaveLength(2)
-    expect(keys.every((k) => k === '姓名' || k === 'Name')).toBe(true)
+    expect(keys).toEqual(expect.arrayContaining(['姓名', '手机号']))
     expect(typeof parsed[0]![keys[0]!]).toBe('string')
 
     const csvDownload = page.waitForEvent('download')

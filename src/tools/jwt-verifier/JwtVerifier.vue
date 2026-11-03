@@ -196,6 +196,20 @@
         </div>
 
         <div class="panel">
+          <label class="label" for="jwt-gen-alg">{{ t('jwtVerifier.generate.algorithmLabel') }}</label>
+          <select
+            id="jwt-gen-alg"
+            v-model="store.algorithm"
+            class="input"
+            data-test="jwt-gen-alg"
+          >
+            <option value="HS256">{{ t('jwtVerifier.generate.algorithms.hs256') }}</option>
+            <option value="RS256">{{ t('jwtVerifier.generate.algorithms.rs256') }}</option>
+            <option value="ES256">{{ t('jwtVerifier.generate.algorithms.es256') }}</option>
+          </select>
+        </div>
+
+        <div v-show="isHs256" class="panel">
           <label class="label" for="jwt-gen-secret">{{ t('jwtVerifier.generate.secretLabel') }}</label>
           <input
             id="jwt-gen-secret"
@@ -210,6 +224,29 @@
           <p class="hint warning" data-test="jwt-gen-secret-warning">
             <ShieldAlert :size="14" />
             {{ t('jwtVerifier.generate.secretWarning') }}
+          </p>
+        </div>
+
+        <div v-show="!isHs256" class="panel">
+          <label class="label" for="jwt-gen-pem">{{ t('jwtVerifier.generate.pemLabel') }}</label>
+          <textarea
+            id="jwt-gen-pem"
+            v-model="store.privateKeyPem"
+            class="textarea compact"
+            data-test="jwt-gen-pem"
+            :placeholder="t('jwtVerifier.generate.pemPlaceholder')"
+            rows="6"
+            spellcheck="false"
+          />
+          <p
+            v-if="pemLiveError"
+            class="error"
+            data-test="jwt-gen-pem-error"
+          >{{ pemLiveError }}</p>
+          <p class="hint">{{ t('jwtVerifier.generate.pemHint') }}</p>
+          <p class="hint warning" data-test="jwt-gen-pem-warning">
+            <ShieldAlert :size="14" />
+            {{ t('jwtVerifier.generate.pemWarning') }}
           </p>
         </div>
 
@@ -237,9 +274,18 @@
               <Copy v-else :size="16" />
               {{ copied ? t('jwtVerifier.generate.copied') : t('jwtVerifier.generate.copy') }}
             </button>
-            <button class="btn primary" data-test="jwt-gen-send" @click="sendToVerify">
+            <button v-if="isHs256" class="btn primary" data-test="jwt-gen-send" @click="sendToVerify">
               <ArrowRightLeft :size="16" />
               {{ t('jwtVerifier.generate.sendToVerify') }}
+            </button>
+            <button
+              v-if="!isHs256 && lastPublicJwkJson"
+              class="btn primary"
+              data-test="jwt-gen-verify-public"
+              @click="verifyWithPublicKey"
+            >
+              <ShieldCheck :size="16" />
+              {{ t('jwtVerifier.generate.verifyWithPublicKey') }}
             </button>
           </div>
         </div>
@@ -273,11 +319,12 @@ import {
 import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
-import { applyJwtTimePreset, decodeJwt, generateJwt, parseJwtJsonObject, verifyJwt } from './jwt'
+import { applyJwtTimePreset, decodeJwt, generateJwt, parseJwtJsonObject, parsePemPrivateKey, verifyJwt } from './jwt'
 import type {
   JwtDecodeErrorCode,
   JwtDecodeResult,
   JwtGenerateErrorCode,
+  JwtSignAlgorithm,
   JwtTimeClaim,
   JwtTimePreset,
 } from './jwt'
@@ -299,11 +346,11 @@ type ToolTab = 'verify' | 'generate'
 const toolMeta: ToolMeta = {
   id: 'jwt-verifier',
   name: 'JWT 解码/验签',
-  description: '本地解码 JWT 并使用 HS256、RS256、ES256 验签，支持 HS256 本地生成',
+  description: '本地解码 JWT 并使用 HS256、RS256、ES256 验签与签发（非对称走 PKCS#8 PEM）',
   category: 'encode',
   icon: 'ShieldCheck',
   component: JwtVerifier,
-  keywords: ['jwt', 'token', 'decode', 'verify', 'generate', 'hs256', 'rs256', 'es256', '验签', '生成']
+  keywords: ['jwt', 'token', 'decode', 'verify', 'generate', 'hs256', 'rs256', 'es256', 'pem', '非对称', '验签', '生成']
 }
 
 const { t } = useI18n()
@@ -316,6 +363,7 @@ const verifying = ref(false)
 const verification = ref<{ ok: true; valid: boolean } | { ok: false; reason: 'unsupported-alg' | 'invalid-key' | 'unexpected' } | null>(null)
 const generating = ref(false)
 const generateError = ref<JwtGenerateErrorCode | null>(null)
+const lastPublicJwkJson = ref('')
 const copied = ref(false)
 let copyResetTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -350,13 +398,32 @@ const decodeErrorMessage = computed(() => t(decodeErrorMessages[decodeError.valu
 // 生成视图：header/payload 实时语法校验（非法即错误态、不产出）。
 const headerParse = computed(() => parseJwtJsonObject(store.headerText))
 const payloadParse = computed(() => parseJwtJsonObject(store.payloadText))
-const canGenerate = computed(() => headerParse.value.ok && payloadParse.value.ok && store.secret.trim().length > 0)
+// 13 票非对称扩展：算法下拉决定密钥形态——HS256 用 secret，RS256/ES256 用 PKCS#8 PEM。
+const isHs256 = computed(() => store.algorithm === 'HS256')
+const pemParse = computed(() => parsePemPrivateKey(store.privateKeyPem))
+const canGenerate = computed(() => {
+  if (!headerParse.value.ok || !payloadParse.value.ok) return false
+  return isHs256.value ? store.secret.trim().length > 0 : pemParse.value.ok
+})
+// PEM 非法输入只错该处：定位在 PEM 框的即时错误（不弹全局、不动已有 token）。
+const pemLiveError = computed(() => {
+  if (isHs256.value) return ''
+  if (!store.privateKeyPem.trim()) return ''
+  if (pemParse.value.ok) return ''
+  const keys = { empty: 'pemEmpty', format: 'pemFormat', pkcs1: 'pemPkcs1', encrypted: 'pemEncrypted' } as const
+  return t(`jwtVerifier.generate.errors.${keys[pemParse.value.reason]}`)
+})
 const generateErrorMessages: Record<JwtGenerateErrorCode, string> = {
   'empty-secret': 'jwtVerifier.generate.errors.secret',
   'header-json': 'jwtVerifier.generate.errors.headerJson',
   'header-not-object': 'jwtVerifier.generate.errors.headerObject',
   'payload-json': 'jwtVerifier.generate.errors.payloadJson',
   'payload-not-object': 'jwtVerifier.generate.errors.payloadObject',
+  'pem-empty': 'jwtVerifier.generate.errors.pemEmpty',
+  'pem-format': 'jwtVerifier.generate.errors.pemFormat',
+  'pem-pkcs1': 'jwtVerifier.generate.errors.pemPkcs1',
+  'pem-encrypted': 'jwtVerifier.generate.errors.pemEncrypted',
+  'pem-import': 'jwtVerifier.generate.errors.pemImport',
 }
 const generateErrorMessage = computed(() => (generateError.value ? t(generateErrorMessages[generateError.value]) : ''))
 
@@ -421,18 +488,24 @@ async function generate() {
     const result = await generateJwt({
       headerText: store.headerText,
       payloadText: store.payloadText,
+      algorithm: store.algorithm as JwtSignAlgorithm,
       secret: store.secret,
+      privateKeyPem: store.privateKeyPem,
     })
     if (result.ok) {
       store.token = result.token
+      // 非对称签发成功时缓存派生公钥（仅内存），供「用公钥验签」桥接。
+      lastPublicJwkJson.value = result.publicJwkJson ?? ''
       generateError.value = null
     } else {
       store.token = ''
+      lastPublicJwkJson.value = ''
       generateError.value = result.reason
     }
   } catch {
     // WebCrypto 签名在合法输入下不会失败；防御性兜底：不产出结果。
     store.token = ''
+    lastPublicJwkJson.value = ''
   } finally {
     generating.value = false
   }
@@ -441,6 +514,7 @@ async function generate() {
 function resetGenerate() {
   store.reset()
   generateError.value = null
+  lastPublicJwkJson.value = ''
   copied.value = false
   if (copyResetTimer !== undefined) clearTimeout(copyResetTimer)
 }
@@ -469,6 +543,20 @@ async function sendToVerify() {
   token.value = generated
   activeTab.value = 'verify'
   // 等待既有 watcher 复位旧的解码/验签结果后再触发，避免被异步复位覆盖。
+  await nextTick()
+  decode()
+  await verify()
+}
+
+// 13 票非对称闭环：签发成功后用派生公钥走既有验签区（展示签名有效）。
+async function verifyWithPublicKey() {
+  const generated = store.token
+  const publicJwkJson = lastPublicJwkJson.value
+  if (!generated || !publicJwkJson) return
+
+  keyInput.value = publicJwkJson
+  token.value = generated
+  activeTab.value = 'verify'
   await nextTick()
   decode()
   await verify()
