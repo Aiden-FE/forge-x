@@ -17,7 +17,11 @@ function prefix(file, size) {
 }
 
 const actual = readdirSync(directory).sort()
-const required = [...names, 'candidate-manifest.json', 'SHA256SUMS'].sort()
+// `create` runs on a cold directory: the two installers are its INPUT, the
+// manifest + SHA256SUMS are its OUTPUT (regression introduced by the
+// automated-verification change and fixed here). `verify` runs on the bound
+// release-candidate artifact, which must already carry both side files.
+const required = (mode === 'create' ? names : [...names, 'candidate-manifest.json', 'SHA256SUMS']).sort()
 // Candidates built before automated verification carry the human-QA template;
 // it is ignored here so existing candidate artifacts still verify.
 const legacyExtras = new Set(['qa-evidence.template.json'])
