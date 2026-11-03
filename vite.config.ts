@@ -14,9 +14,41 @@ const isTauri = !!(
   process.env.TAURI_ENV_PLATFORM
 )
 
+// Named vendor chunks keep third-party deps out of the first-screen closure
+// and let scripts/check-bundle-budgets.mjs attribute per-lib gzip budgets
+// (v0.4.0 spec appendix §1: on-demand ≤50 KB, sql-formatter exempt ≤80 KB).
+const vendorChunkMap: Record<string, string> = {
+  'sql-formatter': 'vendor-sql-formatter',
+  'cron-parser': 'vendor-cron-parser',
+  'cronstrue': 'vendor-cronstrue',
+  'expr-eval': 'vendor-expr-eval',
+  'highlight.js': 'vendor-hljs',
+  'cropperjs': 'vendor-cropperjs',
+  'bcryptjs': 'vendor-bcryptjs',
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  build: {
+    manifest: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          // Windows rolldown ids use backslashes — normalize before matching.
+          const normalized = id.replaceAll('\\', '/')
+          if (!normalized.includes('/node_modules/')) return undefined
+          // pnpm layout nests deps under node_modules/.pnpm/<pkg>@ver/node_modules/<pkg>/ —
+          // the LAST node_modules/<pkg> segment is the real package id.
+          const matches = [...normalized.matchAll(/node_modules\/((?:@[^/]+\/)?[^/]+)\//g)]
+          const last = matches[matches.length - 1]
+          if (!last) return undefined
+          if (process.env.DEBUG_CHUNKS) console.error('[manualChunks]', last[1])
+          return vendorChunkMap[last[1]]
+        },
+      },
+    },
+  },
   server: {
     port: 5175,
     strictPort: true,

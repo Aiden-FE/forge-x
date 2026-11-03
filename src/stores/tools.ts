@@ -11,6 +11,7 @@ export const useToolsStore = defineStore('tools', () => {
     { id: 'all', label: '全部', icon: 'LayoutGrid' },
     { id: 'ai', label: 'AI', icon: 'Languages' },
     { id: 'encode', label: '编码转换', icon: 'Binary' },
+    { id: 'security', label: '安全加密', icon: 'ShieldCheck' },
     { id: 'format', label: '格式化', icon: 'Braces' },
     { id: 'generate', label: '生成器', icon: 'Sparkles' },
     { id: 'convert', label: '转换', icon: 'ArrowLeftRight' },

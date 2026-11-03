@@ -12,6 +12,7 @@ const en: LocaleMessages = {
   categories: {
     ai: 'AI',
     encode: 'Encoding',
+    security: 'Security',
     format: 'Formatter',
     generate: 'Generator',
     convert: 'Convert',

@@ -12,6 +12,7 @@ const zhCN: LocaleMessages = {
   categories: {
     ai: 'AI',
     encode: '编码转换',
+    security: '安全加密',
     format: '格式化',
     generate: '生成器',
     convert: '转换',

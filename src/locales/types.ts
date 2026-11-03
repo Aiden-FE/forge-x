@@ -10,6 +10,7 @@ export interface LocaleMessages {
   categories: {
     ai: string
     encode: string
+    security: string
     format: string
     generate: string
     convert: string
