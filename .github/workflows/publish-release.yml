@@ -11,14 +11,6 @@ on:
         description: Successful Release candidate workflow run ID
         required: true
         type: string
-      qa-evidence-url:
-        description: Immutable raw GitHub QA evidence URL pinned to commit SHA
-        required: true
-        type: string
-      qa-evidence-sha256:
-        description: SHA-256 of the QA evidence file
-        required: true
-        type: string
 
 permissions:
   contents: read
