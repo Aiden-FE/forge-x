@@ -156,6 +156,107 @@
           </button>
         </div>
       </section>
+
+      <!-- 区间反推（票据 06 交付物 B：起/止两输入 + 双输出，等分切分下方，不设独立页签） -->
+      <section class="panel">
+        <h2 class="section-title">{{ t('ipv4Subnet.rangeTitle') }}</h2>
+        <p class="notice" data-test="range-hint">{{ t('ipv4Subnet.rangeHint') }}</p>
+
+        <div class="range-inputs">
+          <div class="range-field">
+            <label class="label" for="range-start">{{ t('ipv4Subnet.rangeStartLabel') }}</label>
+            <input
+              id="range-start"
+              v-model="rangeStart"
+              class="input mono"
+              data-test="range-start"
+              :placeholder="t('ipv4Subnet.rangePlaceholder')"
+              spellcheck="false"
+              autocomplete="off"
+              @input="onRangeInput"
+            />
+            <p v-if="rangeError?.field === 'start'" class="error" data-test="range-error-start">
+              {{ t('ipv4Subnet.rangeErrInvalid', { value: rangeError.value ?? '' }) }}
+            </p>
+          </div>
+          <div class="range-field">
+            <label class="label" for="range-end">{{ t('ipv4Subnet.rangeEndLabel') }}</label>
+            <input
+              id="range-end"
+              v-model="rangeEnd"
+              class="input mono"
+              data-test="range-end"
+              :placeholder="t('ipv4Subnet.rangePlaceholder')"
+              spellcheck="false"
+              autocomplete="off"
+              @input="onRangeInput"
+            />
+            <p v-if="rangeError?.field === 'end'" class="error" data-test="range-error-end">
+              {{ t('ipv4Subnet.rangeErrInvalid', { value: rangeError.value ?? '' }) }}
+            </p>
+          </div>
+        </div>
+
+        <!-- 起 > 止显式报错（错误时保留上一次结果） -->
+        <p v-if="rangeError?.field === 'order'" class="error" data-test="range-error-order">
+          {{ t('ipv4Subnet.rangeErrOrder') }}
+        </p>
+
+        <template v-if="rangeResult">
+          <!-- 主输出：精确覆盖 CIDR 列表（并集 = 区间、互不重叠，天然 ≤ 62 行） -->
+          <div class="range-output">
+            <p class="range-subtitle" data-test="range-exact-count">
+              {{ t('ipv4Subnet.rangeExactCount', { count: String(rangeResult.rows.length) }) }}
+            </p>
+            <div class="split-table" data-test="range-rows">
+              <div class="split-head">
+                <span>{{ t('ipv4Subnet.rangeColCidr') }}</span>
+                <span>{{ t('ipv4Subnet.rangeColRange') }}</span>
+                <span>{{ t('ipv4Subnet.rangeColTotal') }}</span>
+              </div>
+              <button
+                v-for="(row, i) in rangeResult.rows"
+                :key="row.cidr"
+                type="button"
+                class="split-row mono"
+                :data-test="`range-row-${i}`"
+                :title="t('ipv4Subnet.rangeRowCopyHint')"
+                @click="copyRangeCidr(row.cidr)"
+              >
+                <span :data-test="`range-cidr-${i}`">{{ row.cidr }}{{ copiedRangeCidr === row.cidr ? ' ✓' : '' }}</span>
+                <span>{{ ip(row.firstU32) }} – {{ ip(row.lastU32) }}</span>
+                <span>{{ row.total.toLocaleString() }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 辅输出：最小包含 CIDR（it-tools 同款单条扩张，对照口径） -->
+          <div class="range-output">
+            <p class="range-subtitle">{{ t('ipv4Subnet.rangeContainingTitle') }}</p>
+            <dl class="rows">
+              <div class="row">
+                <dt>{{ t('ipv4Subnet.rangeContainingCidr') }}</dt>
+                <dd class="mono" data-test="range-containing-cidr">{{ rangeResult.containing.cidr }}</dd>
+              </div>
+              <div class="row">
+                <dt>{{ t('ipv4Subnet.rangeContainingRange') }}</dt>
+                <dd class="mono" data-test="range-containing-range">
+                  {{ ip(rangeResult.containing.firstU32) }} – {{ ip(rangeResult.containing.lastU32) }}
+                </dd>
+              </div>
+              <div class="row">
+                <dt>{{ t('ipv4Subnet.rangeOldSize') }}</dt>
+                <dd class="mono" data-test="range-old-size">{{ rangeResult.oldSize.toLocaleString() }}</dd>
+              </div>
+              <div class="row">
+                <dt>{{ t('ipv4Subnet.rangeNewSize') }}</dt>
+                <dd class="mono" data-test="range-new-size">{{ rangeResult.newSize.toLocaleString() }}</dd>
+              </div>
+            </dl>
+          </div>
+        </template>
+        <p v-else-if="!rangeError" class="empty" data-test="range-empty">{{ t('ipv4Subnet.rangePlaceholder') }}</p>
+      </section>
     </div>
   </ToolLayout>
 </template>
@@ -166,26 +267,34 @@ import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import Ipv4Subnet from './Ipv4Subnet.vue'
-import {
-  SPLIT_COUNT_OPTIONS,
-  analyze,
-  equalSplit,
-  formatBinaryIp,
-  formatCidr,
-  formatIp,
-} from './subnet'
+import { SPLIT_COUNT_OPTIONS, analyze, equalSplit, formatBinaryIp, formatCidr, formatIp } from './subnet'
 import type { NetworkLabel, SplitRow, SubnetError, SubnetInfo } from './subnet'
+import { analyzeRange } from './range'
+import type { RangeError, RangeExpanderResult } from './range'
 
 const { t } = useI18n()
 
 const toolMeta: ToolMeta = {
   id: 'ipv4-subnet',
   name: 'IPv4 子网计算',
-  description: 'CIDR 与点分掩码解析、九项参数与等分切分',
+  description: 'CIDR 与点分掩码解析、九项参数、等分切分与区间反推 CIDR',
   category: 'debug',
   icon: 'Network',
   component: Ipv4Subnet,
-  keywords: ['ipv4', '子网', 'subnet', 'cidr', 'netmask', '掩码', '通配符', 'ip 计算', 'wildcard'],
+  keywords: [
+    'ipv4',
+    '子网',
+    'subnet',
+    'cidr',
+    'netmask',
+    '掩码',
+    '通配符',
+    'ip 计算',
+    'wildcard',
+    '区间反推',
+    'cidr 列表',
+    'range',
+  ],
 }
 
 // ---- 输入：转换类实时防抖 300ms；错误保留上一次结果 ----
@@ -345,6 +454,60 @@ async function copyCidr(value: string): Promise<void> {
 
 onUnmounted(() => {
   if (copiedTimer !== undefined) window.clearTimeout(copiedTimer)
+})
+
+// ---- 区间反推（票据 06 交付物 B：起/止两输入 + 双输出；实时防抖；只错该处） ----
+
+const rangeStart = ref('')
+const rangeEnd = ref('')
+const debouncedRange = ref<{ start: string; end: string }>({ start: '', end: '' })
+
+let rangeTimer: number | undefined
+function onRangeInput(): void {
+  if (rangeTimer !== undefined) window.clearTimeout(rangeTimer)
+  rangeTimer = window.setTimeout(() => {
+    rangeTimer = undefined
+    debouncedRange.value = { start: rangeStart.value, end: rangeEnd.value }
+  }, DEBOUNCE_MS)
+}
+
+const rangeResult = ref<RangeExpanderResult | null>(null)
+const rangeError = ref<RangeError | null>(null)
+
+watch(debouncedRange, ({ start, end }) => {
+  const outcome = analyzeRange(start, end)
+  if (outcome.status === 'ok') {
+    rangeResult.value = outcome.result
+    rangeError.value = null
+  } else if (outcome.status === 'error') {
+    // 只错该处：错误定位到起/止/顺序，保留上一次结果
+    rangeError.value = outcome.error
+  } else {
+    // 双空或只填一侧：清结果与错误
+    rangeResult.value = null
+    rangeError.value = null
+  }
+})
+
+const copiedRangeCidr = ref('')
+let copiedRangeTimer: number | undefined
+
+async function copyRangeCidr(value: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value)
+    copiedRangeCidr.value = value
+    if (copiedRangeTimer !== undefined) window.clearTimeout(copiedRangeTimer)
+    copiedRangeTimer = window.setTimeout(() => {
+      copiedRangeCidr.value = ''
+    }, 1500)
+  } catch {
+    // 剪贴板不可用时静默
+  }
+}
+
+onUnmounted(() => {
+  if (rangeTimer !== undefined) window.clearTimeout(rangeTimer)
+  if (copiedRangeTimer !== undefined) window.clearTimeout(copiedRangeTimer)
 })
 </script>
 
@@ -571,5 +734,36 @@ onUnmounted(() => {
 
 .split-row span:first-child {
   color: var(--text-primary);
+}
+
+.range-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
+.range-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.range-output {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.range-subtitle {
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .range-inputs {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

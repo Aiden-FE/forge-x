@@ -1,0 +1,116 @@
+import type { ToolLocaleFragment } from '@/locales/types'
+
+export default {
+  'zh-CN': {
+    tools: {
+      'bip39-generator': 'BIP39 助记词',
+      'bip39-generatorDesc': '生成与校验 BIP39 助记词（英文词表），可派生 seed',
+    },
+    bip39: {
+      // 生成区
+      generateTitle: '生成',
+      wordCountLabel: '词数档位',
+      wordCountOption: '{{count}} 词',
+      strengthHint: '熵 {{entropy}} 位 + 校验和 {{checksum}} 位（BIP39 固定比例 32:1）',
+      generate: '生成助记词',
+      regenerate: '重新生成',
+      mnemonicLabel: '助记词',
+      maskedHint: '助记词已生成（默认隐藏）',
+      reveal: '点击显示',
+      hide: '隐藏',
+      entropyShow: '显示熵 (hex)',
+      entropyHide: '隐藏熵',
+      entropyLabel: '熵 (hex，只读)',
+      copy: '复制',
+      copied: '已复制',
+      // 校验区
+      verifyTitle: '校验',
+      verifyPlaceholder: '粘贴待校验的 BIP39 助记词（仅英文词表），实时校验…',
+      verifyHint: '实时校验（防抖 300ms）；仅支持英文词表',
+      verifyEmpty: '粘贴助记词后实时校验：词数 / 词表 / 校验和',
+      validBadge: '✓ 有效助记词',
+      invalidBadge: '✗ 无效助记词',
+      entropyInfo: '{{count}} 词 → {{bits}} 位熵',
+      entropyHexLabel: '熵 (hex)',
+      // seed 派生区
+      seedTitle: 'seed 派生',
+      seedHint: '对上方校验区通过校验的助记词派生 seed（PBKDF2-HMAC-SHA512 × 2048 轮，按钮触发）。',
+      passphraseLabel: 'passphrase（可选）',
+      passphrasePlaceholder: '留空 = BIP39 标准口径',
+      passphraseHint: 'passphrase 是 seed 的加盐口令，不是助记词本身；留空派生标准 seed。',
+      derive: '派生 seed',
+      deriving: '派生中…',
+      deriveBlocked: '先在校验区粘贴并通过校验，才能派生 seed',
+      seedLabel: 'seed (hex，128 字符)',
+      seedCopy: '复制',
+      seedCopied: '已复制',
+      seedStale: '助记词或 passphrase 已变更，下方 seed 可能不再对应当前输入，请重新派生',
+      // 常驻声明
+      notice: '纯本地生成：助记词不持久化、无「记住」选项（严于 TOTP），页面关闭即消失。',
+      walletWarning: '假助记词 ≠ 钱包安全：请用正规钱包软件生成并备份真实钱包助记词，本工具仅供开发与测试。',
+      // 错误清单
+      errors: {
+        wordCount: '词数非法：{{count}} 词（合法档位 12/15/18/21/24）',
+        unknownWord: '第 {{index}} 词「{{word}}」不在英文词表内',
+        checksum: '校验和失败：短语与任何合法熵不对应（数学上无法定位是哪个词错）',
+        internal: '发生意外错误：{{message}}',
+      },
+    },
+  },
+  en: {
+    tools: {
+      'bip39-generator': 'BIP39 Mnemonic',
+      'bip39-generatorDesc': 'Generate and validate BIP39 mnemonics (English wordlist), optional seed derivation',
+    },
+    bip39: {
+      // Generate section
+      generateTitle: 'Generate',
+      wordCountLabel: 'Word count',
+      wordCountOption: '{{count}} words',
+      strengthHint: '{{entropy}} bits entropy + {{checksum}}-bit checksum (BIP39 fixed 32:1 ratio)',
+      generate: 'Generate mnemonic',
+      regenerate: 'Regenerate',
+      mnemonicLabel: 'Mnemonic',
+      maskedHint: 'Mnemonic generated (hidden by default)',
+      reveal: 'Click to show',
+      hide: 'Hide',
+      entropyShow: 'Show entropy (hex)',
+      entropyHide: 'Hide entropy',
+      entropyLabel: 'Entropy (hex, read-only)',
+      copy: 'Copy',
+      copied: 'Copied',
+      // Verify section
+      verifyTitle: 'Validate',
+      verifyPlaceholder: 'Paste a BIP39 mnemonic (English wordlist only) for live validation…',
+      verifyHint: 'Live validation (300ms debounce); English wordlist only',
+      verifyEmpty: 'Paste a mnemonic to validate: word count / wordlist / checksum',
+      validBadge: '✓ Valid mnemonic',
+      invalidBadge: '✗ Invalid mnemonic',
+      entropyInfo: '{{count}} words → {{bits}}-bit entropy',
+      entropyHexLabel: 'Entropy (hex)',
+      // Seed section
+      seedTitle: 'Seed derivation',
+      seedHint: 'Derives a seed from the mnemonic validated above (PBKDF2-HMAC-SHA512 × 2048 rounds, button-triggered).',
+      passphraseLabel: 'Passphrase (optional)',
+      passphrasePlaceholder: 'Empty = BIP39 standard',
+      passphraseHint: 'The passphrase salts the seed derivation; it is not part of the mnemonic itself.',
+      derive: 'Derive seed',
+      deriving: 'Deriving…',
+      deriveBlocked: 'Paste and validate a mnemonic above before deriving a seed',
+      seedLabel: 'Seed (hex, 128 chars)',
+      seedCopy: 'Copy',
+      seedCopied: 'Copied',
+      seedStale: 'Mnemonic or passphrase changed; the seed below may no longer match the current input — re-derive',
+      // Persistent notices
+      notice: 'Fully local: the mnemonic is never persisted and there is no opt-in memory (stricter than TOTP); closing the page discards it.',
+      walletWarning: 'A fake mnemonic ≠ wallet safety: generate and back up real wallet phrases with reputable wallet software; this tool is for development and testing only.',
+      // Error list
+      errors: {
+        wordCount: 'Invalid word count: {{count}} words (valid tiers: 12/15/18/21/24)',
+        unknownWord: 'Word #{{index}} "{{word}}" is not in the English wordlist',
+        checksum: 'Checksum failed: the phrase matches no valid entropy (mathematically impossible to tell which word is wrong)',
+        internal: 'Unexpected error: {{message}}',
+      },
+    },
+  },
+} satisfies ToolLocaleFragment

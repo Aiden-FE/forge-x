@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - fast-xml-parser@5.12.0
