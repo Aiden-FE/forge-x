@@ -38,7 +38,7 @@ test.describe('XML 格式化 e2e', () => {
     await expect(page.locator('[data-test="xml-status"]')).toHaveText('XML 良构')
   })
 
-  test('畸形 XML：行/列错误呈现（真 Chromium 硬断言）；输出保留旧值', async ({ page }) => {
+  test('畸形 XML：行/列错误呈现（Chromium 硬断言，行号跨引擎）；输出保留旧值', async ({ page, browserName }) => {
     await openTool(page)
 
     // 先有一次成功输出，确立「旧值」
@@ -47,12 +47,18 @@ test.describe('XML 格式化 e2e', () => {
       '<a x="1">\n  <b>text</b>\n  <c/>\n</a>',
     )
 
-    // 闭合标签错配：Chromium parsererror → 第 1 行第 10 列 + 引擎描述
+    // 闭合标签错配：各引擎都报 parsererror（行/列经容忍提取）；列号与文案
+    // 引擎各异（Chromium 第 10 列 / WebKit 第 11 列不同措辞）——精确断言仅
+    // 限 Chromium（channel=chrome），跨引擎断言行号与「有错误」本身。
     await page.fill('[data-test="xml-input"]', '<a><b></a>')
-    await expect(page.locator('[data-test="xml-error"]')).toBeVisible()
-    await expect(page.locator('[data-test="xml-error"]')).toContainText('XML 不良构')
-    await expect(page.locator('[data-test="xml-error"]')).toContainText('第 1 行第 10 列')
-    await expect(page.locator('[data-test="xml-error"]')).toContainText('Unexpected closing tag: a != b')
+    const error = page.locator('[data-test="xml-error"]')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('XML 不良构')
+    await expect(error).toContainText('第 1 行')
+    if (browserName === 'chromium') {
+      await expect(error).toContainText('第 1 行第 10 列')
+      await expect(error).toContainText('Unexpected closing tag: a != b')
+    }
     // 只错该处：输出保留上一次成功值；良构状态行让位于错误行
     await expect(page.locator('[data-test="xml-output"]')).toHaveValue(
       '<a x="1">\n  <b>text</b>\n  <c/>\n</a>',
@@ -60,14 +66,19 @@ test.describe('XML 格式化 e2e', () => {
     await expect(page.locator('[data-test="xml-status"]')).toHaveCount(0)
   })
 
-  test('裸 & 实体非法：真浏览器良构拦截（happy-dom 单测缺口的闭环）', async ({ page }) => {
+  test('裸 & 实体非法：真浏览器良构拦截（happy-dom 单测缺口的闭环）', async ({ page, browserName }) => {
     await openTool(page)
 
-    // 裸 & 在真 Chromium DOMParser 下即 parsererror（happy-dom 放行，单测无法覆盖）
+    // 裸 & 在真浏览器 DOMParser 下即 parsererror（happy-dom 放行，单测无法覆盖）；
+    // 列号/文案为 Chromium 精确口径，跨引擎仅断言「错误出现 + 无输出」。
     await page.fill('[data-test="xml-input"]', '<a>AT&T</a>')
-    await expect(page.locator('[data-test="xml-error"]')).toBeVisible()
-    await expect(page.locator('[data-test="xml-error"]')).toContainText('第 1 行第 8 列')
-    await expect(page.locator('[data-test="xml-error"]')).toContainText('Unexpected token inside entity')
+    const error = page.locator('[data-test="xml-error"]')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('XML 不良构')
+    if (browserName === 'chromium') {
+      await expect(error).toContainText('第 1 行第 8 列')
+      await expect(error).toContainText('Unexpected token inside entity')
+    }
     // 无输出产生（从未成功过）
     await expect(page.locator('[data-test="xml-output"]')).toHaveValue('')
   })

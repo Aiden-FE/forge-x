@@ -43,7 +43,7 @@ test.describe('XML↔JSON 互转 e2e', () => {
     await expect(page.locator('[data-test="xml-json-error"]')).toHaveCount(0)
   })
 
-  test('不良构 XML：行/列报错（真 Chromium 硬断言）；输出保留旧值', async ({ page }) => {
+  test('不良构 XML：行/列报错（Chromium 硬断言，行号跨引擎）；输出保留旧值', async ({ page, browserName }) => {
     await openTool(page)
 
     // 先有一次成功转换，确立「旧值」
@@ -52,11 +52,16 @@ test.describe('XML↔JSON 互转 e2e', () => {
       '{\n  "a": {\n    "@_x": "1.234",\n    "@_y": "It\'s"\n  }\n}',
     )
 
-    // 闭合标签错配：Chromium parsererror → 第 1 行第 10 列（与 xml-formatter 同源权威）
+    // 闭合标签错配：各引擎都报 parsererror（与 xml-formatter 同源权威）；
+    // 列号引擎各异（Chromium 第 10 列），精确断言仅限 Chromium。
     await page.fill('[data-test="xml-json-src"]', '<a><b></a>')
-    await expect(page.locator('[data-test="xml-json-error"]')).toBeVisible()
-    await expect(page.locator('[data-test="xml-json-error"]')).toContainText('良构校验未通过')
-    await expect(page.locator('[data-test="xml-json-error"]')).toContainText('第 1 行第 10 列')
+    const error = page.locator('[data-test="xml-json-error"]')
+    await expect(error).toBeVisible()
+    await expect(error).toContainText('良构校验未通过')
+    await expect(error).toContainText('第 1 行')
+    if (browserName === 'chromium') {
+      await expect(error).toContainText('第 1 行第 10 列')
+    }
     // 报错只错该处：输出保留上一次成功值
     await expect(page.locator('[data-test="xml-json-dst"]')).toHaveValue(
       '{\n  "a": {\n    "@_x": "1.234",\n    "@_y": "It\'s"\n  }\n}',
