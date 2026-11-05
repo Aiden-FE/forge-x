@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// 每个 round-trip 测试跑两次 PBKDF2-SHA256 ×600k（加密 + 解密派生）——本地约
+// 3–8s，CI 双核 runner 更慢，会超 vitest 默认 5s（首上 CI 即触发）。本文件的
+// round-trip 类测试统一给 60s 预算；快速纯函数测试不受影响（提前完成即返回）。
+vi.setConfig({ testTimeout: 60_000 })
+
 import {
   FILE_CHUNK_BYTES,
   FOLD_PARTS_EVERY,
