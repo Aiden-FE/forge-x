@@ -1,6 +1,19 @@
 <template>
   <ToolLayout :tool="toolMeta">
     <div class="aes-tool">
+      <!-- 文本 / 文件 页签：文本模式不动，文件为 FGX1 v2 新增 -->
+      <div class="segment-group tab-group" role="tablist" :aria-label="t('aesCipher.tabLabel')" data-test="ac-tabs">
+        <label class="segment" :class="{ active: tab === 'text' }">
+          <input v-model="tab" type="radio" value="text" data-test="ac-tab-text" />
+          {{ t('aesCipher.tabText') }}
+        </label>
+        <label class="segment" :class="{ active: tab === 'file' }">
+          <input v-model="tab" type="radio" value="file" data-test="ac-tab-file" />
+          {{ t('aesCipher.tabFile') }}
+        </label>
+      </div>
+
+      <template v-if="tab === 'text'">
       <!-- 密钥：passphrase 派生 / raw key 粘贴；错误只错该输入框 -->
       <section class="panel">
         <h2 class="section-title">{{ t('aesCipher.keySectionTitle') }}</h2>
@@ -207,6 +220,230 @@
         <p class="hint">{{ t('aesCipher.formatNote') }}</p>
       </section>
 
+      <!-- OpenSSL 兼容解密（单向）：独立区块——FGX1 解密口不认第三方密文，二者关系是并列而非开关 -->
+      <section class="panel">
+        <h2 class="section-title">{{ t('aesCipher.opensslTitle') }}</h2>
+        <p class="hint">{{ t('aesCipher.opensslHint') }}</p>
+
+        <div class="control">
+          <label class="label" for="ac-openssl-input">{{ t('aesCipher.opensslInputLabel') }}</label>
+          <textarea
+            id="ac-openssl-input"
+            v-model="opensslInput"
+            class="textarea"
+            data-test="aes-openssl-input"
+            :placeholder="t('aesCipher.opensslInputPlaceholder')"
+            rows="4"
+          />
+        </div>
+
+        <div class="controls-row">
+          <div class="control">
+            <label class="label" for="ac-openssl-cipher">{{ t('aesCipher.opensslCipherLabel') }}</label>
+            <select id="ac-openssl-cipher" v-model="opensslCipher" class="select" data-test="aes-openssl-cipher">
+              <option value="aes-128-cbc">AES-128-CBC</option>
+              <option value="aes-192-cbc">AES-192-CBC</option>
+              <option value="aes-256-cbc">AES-256-CBC</option>
+            </select>
+            <p class="hint">{{ t('aesCipher.opensslCipherHint') }}</p>
+          </div>
+          <div class="control">
+            <span class="label">{{ t('aesCipher.opensslKdfLabel') }}</span>
+            <div class="segment-group" role="radiogroup" :aria-label="t('aesCipher.opensslKdfLabel')">
+              <label class="segment" :class="{ active: opensslKdf === 'md5' }">
+                <input v-model="opensslKdf" type="radio" value="md5" data-test="aes-openssl-kdf-md5" />
+                {{ t('aesCipher.opensslKdfMd5') }}
+              </label>
+              <label class="segment" :class="{ active: opensslKdf === 'pbkdf2' }">
+                <input v-model="opensslKdf" type="radio" value="pbkdf2" data-test="aes-openssl-kdf-pbkdf2" />
+                {{ t('aesCipher.opensslKdfPbkdf2') }}
+              </label>
+            </div>
+            <!-- 弱 KDF 常驻警示：legacy MD5 档位选中即显示 -->
+            <p v-if="opensslKdf === 'md5'" class="warn" data-test="aes-openssl-warning">
+              {{ t('aesCipher.opensslMd5Warning') }}
+            </p>
+          </div>
+          <div v-if="opensslKdf === 'pbkdf2'" class="control">
+            <label class="label" for="ac-openssl-iter">{{ t('aesCipher.opensslIterLabel') }}</label>
+            <input
+              id="ac-openssl-iter"
+              v-model.number="opensslIterations"
+              class="text-input narrow"
+              type="number"
+              min="1"
+              data-test="aes-openssl-iter"
+            />
+            <p class="hint">{{ t('aesCipher.opensslIterHint') }}</p>
+          </div>
+        </div>
+
+        <div class="control">
+          <label class="label" for="ac-openssl-pass">{{ t('aesCipher.opensslPassphraseLabel') }}</label>
+          <input
+            id="ac-openssl-pass"
+            v-model="opensslPassphrase"
+            class="text-input"
+            type="password"
+            data-test="aes-openssl-passphrase"
+            :placeholder="t('aesCipher.opensslPassphrasePlaceholder')"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="actions">
+          <button
+            class="btn primary"
+            type="button"
+            data-test="aes-openssl-decrypt"
+            :disabled="opensslBusy || opensslInput.trim().length === 0"
+            @click="decryptOpenSslAction"
+          >
+            <Unlock :size="16" />
+            {{ opensslBusy ? t('aesCipher.decrypting') : t('aesCipher.opensslDecrypt') }}
+          </button>
+        </div>
+
+        <p v-if="opensslError" class="error" data-test="aes-openssl-error">
+          {{ opensslError }}
+        </p>
+
+        <div v-if="opensslResult !== null" class="result">
+          <label class="label">{{ t('aesCipher.resultLabel') }}</label>
+          <div class="result-row">
+            <code class="result-value" data-test="aes-openssl-result">{{ opensslResult }}</code>
+            <button class="btn small" type="button" data-test="aes-openssl-copy" @click="copyOpenSslResult">
+              <Check v-if="opensslCopied" :size="14" />
+              <Copy v-else :size="14" />
+              {{ opensslCopied ? t('aesCipher.copied') : t('aesCipher.copy') }}
+            </button>
+          </div>
+        </div>
+      </section>
+      </template>
+
+      <!-- 文件页签：FGX1 v2 分块流式（加密 / 解密 双向） -->
+      <template v-else>
+        <section class="panel">
+          <h2 class="section-title">{{ t('aesCipher.fileTitle') }}</h2>
+          <p class="hint">{{ t('aesCipher.fileHint') }}</p>
+
+          <div class="control">
+            <label class="label" for="ac-file-pass">{{ t('aesCipher.filePassphraseLabel') }}</label>
+            <input
+              id="ac-file-pass"
+              v-model="filePassphrase"
+              class="text-input"
+              type="password"
+              data-test="aes-file-passphrase"
+              :placeholder="t('aesCipher.filePassphrasePlaceholder')"
+              autocomplete="off"
+            />
+            <p class="hint">{{ t('aesCipher.filePassphraseHint') }}</p>
+          </div>
+
+          <div class="control">
+            <span class="label">{{ t('aesCipher.fileDirectionLabel') }}</span>
+            <div class="segment-group" role="radiogroup" :aria-label="t('aesCipher.fileDirectionLabel')">
+              <label class="segment" :class="{ active: fileDirection === 'encrypt' }">
+                <input v-model="fileDirection" type="radio" value="encrypt" data-test="aes-file-mode-encrypt" />
+                {{ t('aesCipher.fileEncrypt') }}
+              </label>
+              <label class="segment" :class="{ active: fileDirection === 'decrypt' }">
+                <input v-model="fileDirection" type="radio" value="decrypt" data-test="aes-file-mode-decrypt" />
+                {{ t('aesCipher.fileDecrypt') }}
+              </label>
+            </div>
+          </div>
+
+          <div
+            class="dropzone"
+            :class="{ 'drag-over': fileDragOver }"
+            data-test="aes-file-drop"
+            @dragover.prevent="fileDragOver = true"
+            @dragleave.prevent="fileDragOver = false"
+            @drop.prevent="onFileDrop"
+            @click="fileInput?.click()"
+          >
+            <input
+              ref="fileInput"
+              type="file"
+              multiple
+              :accept="fileDirection === 'decrypt' ? '.fgx' : undefined"
+              class="hidden-input"
+              data-test="aes-file-input"
+              @change="onFilePicked"
+            />
+            <FileUp :size="18" />
+            <span>{{ t('aesCipher.fileDropHint') }}</span>
+            <span class="hint-inline">{{ t('aesCipher.fileLimits') }}</span>
+          </div>
+
+          <div class="actions">
+            <button
+              class="btn primary"
+              type="button"
+              data-test="aes-file-run"
+              :disabled="fileBusy || fileRows.length === 0 || pendingFileRows === 0"
+              @click="runFileJobs"
+            >
+              <Lock v-if="fileDirection === 'encrypt'" :size="16" />
+              <Unlock v-else :size="16" />
+              {{ fileBusy ? t('aesCipher.fileWorking') : t('aesCipher.fileRun') }}
+            </button>
+            <button
+              v-if="fileSuccessCount > 1"
+              class="btn"
+              type="button"
+              data-test="aes-file-zip"
+              :disabled="fileBusy"
+              @click="downloadFileZip"
+            >
+              <Archive :size="16" />
+              {{ t('aesCipher.fileZip') }}
+            </button>
+            <button class="btn" type="button" data-test="aes-file-clear" :disabled="fileBusy" @click="clearFileRows">
+              <Trash2 :size="16" />
+              {{ t('aesCipher.fileClear') }}
+            </button>
+          </div>
+          <p v-if="fileError" class="error" data-test="aes-file-error">{{ fileError }}</p>
+
+          <ul v-if="fileRows.length > 0" class="file-rows" data-test="aes-file-rows">
+            <li v-for="row in fileRows" :key="row.id" class="file-row" :data-status="row.status" data-test="aes-file-row">
+              <span class="file-name" :title="row.sourceName">{{ row.outputName ?? row.sourceName }}</span>
+              <span v-if="row.status === 'success'" class="file-meta" data-test="aes-file-row-meta">
+                {{ formatFileSize(row.sourceSize) }} → {{ formatFileSize(row.outputSize ?? 0) }}
+              </span>
+              <span v-else-if="row.status === 'working'" class="file-meta" data-test="aes-file-row-working">
+                {{ t('aesCipher.fileWorking') }}
+              </span>
+              <span v-else-if="row.error" class="error" data-test="aes-file-row-error">{{ row.error }}</span>
+              <button
+                v-if="row.status === 'success'"
+                class="btn small"
+                type="button"
+                data-test="aes-file-row-download"
+                @click="downloadFileRow(row)"
+              >
+                <Download :size="14" />
+                {{ t('aesCipher.fileDownload') }}
+              </button>
+              <button
+                class="btn icon"
+                type="button"
+                data-test="aes-file-row-remove"
+                :aria-label="t('aesCipher.fileRemove')"
+                :disabled="fileBusy"
+                @click="removeFileRow(row)"
+              >
+                <X :size="14" />
+              </button>
+            </li>
+          </ul>
+        </section>
+      </template>
+
       <p class="notice" data-test="ac-notice">
         <ShieldCheck :size="14" />
         {{ t('aesCipher.notice') }}
@@ -217,7 +454,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Check, Copy, Lock, ShieldCheck, Unlock } from 'lucide-vue-next'
+import { Archive, Check, Copy, Download, FileUp, Lock, ShieldCheck, Trash2, Unlock, X } from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
@@ -234,6 +471,15 @@ import {
   utf8ByteLength,
 } from './aes'
 import type { AesMode, DecryptFailureReason, KeyBits } from './aes'
+import {
+  DEFAULT_OPENSSL_CIPHER,
+  DEFAULT_OPENSSL_KDF,
+  DEFAULT_PBKDF2_ITERATIONS,
+  decryptOpenSsl,
+} from './openssl'
+import type { OpenSslCipher, OpenSslKdf } from './openssl'
+import { MAX_BATCH_FILES, decryptFileEnvelope, encryptFileEnvelope } from './aesFile'
+import { allocateConflictName, fgxOutputName } from './naming'
 
 const { t } = useI18n()
 
@@ -246,6 +492,10 @@ const toolMeta: ToolMeta = {
   component: AesCipher,
   keywords: ['aes', '加密', '解密', 'encrypt', 'decrypt', 'gcm', 'cbc', '密码学', 'cipher'],
 }
+
+/* ---------- 页签 ---------- */
+
+const tab = ref<'text' | 'file'>('text')
 
 /* ---------- 密钥 ---------- */
 
@@ -407,4 +657,595 @@ async function decrypt(): Promise<void> {
 const envelopeParse = computed(() => parseEnvelope(ciphertext.value))
 const envelopeView = computed(() => (envelopeParse.value.ok ? envelopeParse.value.view : null))
 const parseErrorReason = computed(() => (envelopeParse.value.ok ? null : envelopeParse.value.reason))
+
+/* ---------- OpenSSL 兼容解密（单向，独立区块） ---------- */
+
+const opensslInput = ref('')
+const opensslPassphrase = ref('')
+const opensslCipher = ref<OpenSslCipher>(DEFAULT_OPENSSL_CIPHER)
+const opensslKdf = ref<OpenSslKdf>(DEFAULT_OPENSSL_KDF)
+const opensslIterations = ref(DEFAULT_PBKDF2_ITERATIONS)
+const opensslBusy = ref(false)
+const opensslError = ref('')
+const opensslResult = ref<string | null>(null)
+const opensslCopied = ref(false)
+let opensslTimer: ReturnType<typeof setTimeout> | undefined
+
+let opensslJob = 0
+
+async function decryptOpenSslAction(): Promise<void> {
+  const job = ++opensslJob
+  opensslBusy.value = true
+  opensslError.value = ''
+  opensslResult.value = null
+  try {
+    const outcome = await decryptOpenSsl({
+      input: opensslInput.value,
+      passphrase: opensslPassphrase.value,
+      cipher: opensslCipher.value,
+      kdf: opensslKdf.value,
+      iterations: opensslIterations.value,
+    })
+    if (job !== opensslJob) return
+    if (outcome.ok) {
+      opensslResult.value = outcome.plaintext
+    } else if (outcome.reason === 'not-salted') {
+      opensslError.value = t('aesCipher.opensslErrNotSalted')
+    } else if (outcome.reason === 'bad-encoding') {
+      opensslError.value = t('aesCipher.opensslErrBadEncoding')
+    } else if (outcome.reason === 'unsupported-192') {
+      opensslError.value = t('aesCipher.errorUnsupported192')
+    } else {
+      // 同 magic 不可自动区分：失败提示换 cipher/KDF 组合
+      opensslError.value = t('aesCipher.opensslErrFailed')
+    }
+  } catch {
+    if (job !== opensslJob) return
+    opensslError.value = t('aesCipher.opensslErrFailed')
+  } finally {
+    if (job === opensslJob) opensslBusy.value = false
+  }
+}
+
+async function copyOpenSslResult(): Promise<void> {
+  if (opensslResult.value === null) return
+  await navigator.clipboard.writeText(opensslResult.value)
+  clearTimeout(opensslTimer)
+  opensslCopied.value = true
+  opensslTimer = setTimeout(() => {
+    opensslCopied.value = false
+  }, 1500)
+}
+
+/* ---------- 文件页签：FGX1 v2 ---------- */
+
+type FileRowStatus = 'pending' | 'working' | 'success' | 'failed'
+
+interface FileRow {
+  id: number
+  file: File
+  sourceName: string
+  sourceSize: number
+  status: FileRowStatus
+  error?: string
+  outputName?: string
+  outputSize?: number
+  blob?: Blob
+}
+
+const fileDirection = ref<'encrypt' | 'decrypt'>('encrypt')
+const filePassphrase = ref('')
+const fileRows = ref<FileRow[]>([])
+const fileBusy = ref(false)
+const fileError = ref('')
+const fileDragOver = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const usedOutputNames = new Set<string>()
+let fileRowId = 1
+
+const pendingFileRows = computed(() => fileRows.value.filter((r) => r.status === 'pending').length)
+const fileSuccessCount = computed(() => fileRows.value.filter((r) => r.status === 'success').length)
+
+function fileRowErrorText(reason: 'file-too-large' | 'bad-envelope' | 'gcm-auth' | 'too-many'): string {
+  switch (reason) {
+    case 'file-too-large':
+      return t('aesCipher.fileErrTooLarge')
+    case 'bad-envelope':
+      return t('aesCipher.fileErrBadEnvelope')
+    case 'gcm-auth':
+      return t('aesCipher.fileErrAuth')
+    case 'too-many':
+      return t('aesCipher.fileErrTooMany')
+  }
+}
+
+function addFiles(files: ArrayLike<File>): void {
+  fileError.value = ''
+  for (const file of Array.from(files)) {
+    const row: FileRow = {
+      id: fileRowId++,
+      file,
+      sourceName: file.name,
+      sourceSize: file.size,
+      status: 'pending',
+    }
+    // 批量上限：超出即整行拒绝（沿 WebP 先例：拒绝行也占名，保证上限可见）
+    if (fileRows.value.length >= MAX_BATCH_FILES) {
+      row.status = 'failed'
+      row.error = fileRowErrorText('too-many')
+      fileRows.value.push(row)
+      continue
+    }
+    if (file.size > 512 * 1024 * 1024) {
+      row.status = 'failed'
+      row.error = fileRowErrorText('file-too-large')
+    }
+    fileRows.value.push(row)
+  }
+}
+
+function onFilePicked(e: Event): void {
+  const input = e.target as HTMLInputElement
+  if (input.files?.length) addFiles(input.files)
+  input.value = ''
+}
+
+function onFileDrop(e: DragEvent): void {
+  fileDragOver.value = false
+  if (e.dataTransfer?.files.length) addFiles(e.dataTransfer.files)
+}
+
+function removeFileRow(row: FileRow): void {
+  if (row.outputName) usedOutputNames.delete(row.outputName)
+  fileRows.value = fileRows.value.filter((r) => r.id !== row.id)
+}
+
+function clearFileRows(): void {
+  fileRows.value = []
+  usedOutputNames.clear()
+  fileError.value = ''
+}
+
+async function runFileJobs(): Promise<void> {
+  if (filePassphrase.value.length === 0 && pendingFileRows.value > 0) {
+    fileError.value = t('aesCipher.fileErrNoPassphrase')
+    return
+  }
+  fileBusy.value = true
+  fileError.value = ''
+  for (const row of fileRows.value) {
+    if (row.status !== 'pending') continue
+    row.status = 'working'
+    row.error = undefined
+    try {
+      if (fileDirection.value === 'encrypt') {
+        const outcome = await encryptFileEnvelope({
+          source: row.file,
+          fileName: row.sourceName,
+          passphrase: filePassphrase.value,
+        })
+        if (!outcome.ok) {
+          row.status = 'failed'
+          row.error = fileRowErrorText(outcome.reason)
+          continue
+        }
+        row.blob = outcome.blob
+        row.outputSize = outcome.blob.size
+        const desired = fgxOutputName(row.sourceName)
+        row.outputName = allocateConflictName(desired, usedOutputNames)
+        usedOutputNames.add(row.outputName)
+      } else {
+        const outcome = await decryptFileEnvelope({ source: row.file, passphrase: filePassphrase.value })
+        if (!outcome.ok) {
+          row.status = 'failed'
+          row.error = fileRowErrorText(outcome.reason)
+          continue
+        }
+        row.blob = outcome.blob
+        row.outputSize = outcome.blob.size
+        row.outputName = allocateConflictName(outcome.fileName, usedOutputNames)
+        usedOutputNames.add(row.outputName)
+      }
+      row.status = 'success'
+    } catch {
+      row.status = 'failed'
+      row.error = t('aesCipher.fileErrUnexpected')
+    }
+  }
+  fileBusy.value = false
+}
+
+function triggerDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function downloadFileRow(row: FileRow): void {
+  if (row.status === 'success' && row.blob && row.outputName) triggerDownload(row.blob, row.outputName)
+}
+
+async function downloadFileZip(): Promise<void> {
+  const { default: JSZip } = await import('jszip')
+  const zip = new JSZip()
+  for (const row of fileRows.value) {
+    if (row.status === 'success' && row.blob && row.outputName) zip.file(row.outputName, row.blob)
+  }
+  if (Object.keys(zip.files).length === 0) return
+  triggerDownload(await zip.generateAsync({ type: 'blob' }), 'forgex-aes-files.zip')
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB`
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MiB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`
+  return `${bytes} B`
+}
 </script>
+
+<style scoped>
+/* 沿各工具 scoped 样式惯例（设计令牌见 src/styles/variables.css）；
+   原 v1 组件无样式块，v2 页签化时一并补齐本工具全部类名。 */
+.aes-tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 590;
+  color: var(--text-primary);
+}
+
+.tab-group {
+  align-self: flex-start;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.controls-row {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.controls-row .control {
+  flex: 1;
+  min-width: 160px;
+}
+
+.label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 510;
+}
+
+.text-input,
+.select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: var(--space-xs) var(--space-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.text-input {
+  font-family: var(--font-mono);
+}
+
+.text-input:focus,
+.select:focus {
+  border-color: var(--border-focus);
+}
+
+.text-input.invalid {
+  border-color: var(--error);
+}
+
+.text-input.narrow {
+  width: 110px;
+}
+
+.textarea {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-sm);
+  outline: none;
+  resize: vertical;
+  transition: border-color var(--transition-fast);
+}
+
+.textarea:focus {
+  border-color: var(--border-focus);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-quaternary);
+}
+
+.hint-inline {
+  font-size: 12px;
+  color: var(--text-quaternary);
+}
+
+.warn {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--error);
+}
+
+.error-detail {
+  display: block;
+  font-size: 12px;
+  color: var(--text-quaternary);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.segment-group {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.segment {
+  position: relative; /* input 以 inset:0 覆盖整个 chip，保持可点可聚焦 */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: none;
+  transition: all var(--transition-fast);
+}
+
+.segment + .segment {
+  border-left: 1px solid var(--border);
+}
+
+.segment.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.segment input {
+  /* 视觉隐藏但直接可点：绝对定位铺满 chip（不挡 label 文本的可达性——
+     点击落到 input 本体，标签联动与键盘聚焦都成立，e2e page.check 可达）。 */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn.small {
+  padding: 2px var(--space-sm);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.btn.icon {
+  padding: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.result-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.result-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--text-quaternary);
+  padding: var(--space-md);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.parse {
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-md);
+}
+
+.parse-rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.parse-row {
+  display: flex;
+  gap: var(--space-md);
+  font-size: 12px;
+}
+
+.parse-row dt {
+  color: var(--text-quaternary);
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.parse-row dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-quaternary);
+}
+
+/* ---- 文件页签 ---- */
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--space-lg);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.dropzone:hover,
+.dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
+.hidden-input {
+  display: none;
+}
+
+.file-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+</style>

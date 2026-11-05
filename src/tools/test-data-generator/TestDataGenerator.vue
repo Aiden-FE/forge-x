@@ -63,6 +63,28 @@
           </label>
         </div>
 
+        <!-- 种子复现（CONTEXT.md：同 seed + 同配置 + 同版本 → 逐字节一致；留空 = 随机派生） -->
+        <div class="control">
+          <span class="label" for="tdg-seed">{{ t('testDataGenerator.seedLabel') }}</span>
+          <div class="seed-row">
+            <input
+              id="tdg-seed"
+              v-model="seedRaw"
+              type="text"
+              class="input seed-input"
+              :placeholder="t('testDataGenerator.seedPlaceholder')"
+              spellcheck="false"
+              autocomplete="off"
+              data-test="tdg-seed-input"
+            />
+            <button type="button" class="btn" data-test="tdg-seed-dice" @click="rollSeed">
+              <Dices :size="16" />
+              {{ t('testDataGenerator.seedDice') }}
+            </button>
+          </div>
+          <p class="hint" data-test="tdg-seed-hint">{{ t('testDataGenerator.seedHint') }}</p>
+        </div>
+
         <div class="controls-row">
           <label class="range-item">
             <span class="label" for="tdg-count">{{ t('testDataGenerator.countLabel') }}</span>
@@ -110,6 +132,15 @@
         </div>
 
         <section class="panel">
+          <!-- 结果区头部：所用 seed 一律展示（生成即携带 seed）+ 独立复制；导出不嵌 seed -->
+          <div class="seed-bar" data-test="tdg-seed-bar">
+            <span class="seed-value" data-test="tdg-seed-display">seed:&nbsp;<code>{{ formattedSeed }}</code></span>
+            <button type="button" class="btn" data-test="tdg-seed-copy" @click="copySeed">
+              <CopyCheck v-if="seedCopied" :size="14" />
+              <Copy v-else :size="14" />
+              {{ seedCopied ? t('testDataGenerator.seedCopied') : t('testDataGenerator.seedCopy') }}
+            </button>
+          </div>
           <span class="label" data-test="tdg-rows-note">{{ rowsNote }}</span>
           <div class="table-wrap" data-test="tdg-table-wrap">
             <table class="table" data-test="tdg-table">
@@ -133,7 +164,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { Download, Sparkles, Trash2 } from 'lucide-vue-next'
+import { Copy, CopyCheck, Dices, Download, Sparkles, Trash2 } from 'lucide-vue-next'
 import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
@@ -143,12 +174,13 @@ import {
   FIELDS,
   MAX_COUNT,
   MIN_COUNT,
-  generateRows,
+  generateSeeded,
   rowsToCsv,
   toRecords,
   validateCount,
 } from './generator'
 import type { DataLocale, FieldId, GenerateError } from './generator'
+import { deriveRandomSeed, formatSeed } from './rng'
 
 const { t } = useI18n()
 
@@ -171,6 +203,8 @@ const datetimeTo = ref('')
 const integerMinRaw = ref('')
 const integerMaxRaw = ref('')
 const countRaw = ref('10')
+// 种子复现（票据 11）：输入可留空（= 随机派生）；控制只影响下一次生成，输入框不回填
+const seedRaw = ref('')
 
 const selectedFields = computed<FieldId[]>(() => FIELDS.filter((f) => checked[f.id]).map((f) => f.id))
 
@@ -178,6 +212,12 @@ const generating = ref(false)
 const error = ref('')
 const rows = ref<Record<FieldId, string>[]>([])
 const generatedFields = ref<FieldId[]>([])
+/** 本批所用 seed（生成即携带，结果区一律展示；粘回输入框即可复现）。 */
+const usedSeed = ref<number | null>(null)
+const seedCopied = ref(false)
+
+/** 展示形态：`0x` + 8 位小写十六进制（rng.ts formatSeed）。 */
+const formattedSeed = computed(() => (usedSeed.value === null ? '' : formatSeed(usedSeed.value)))
 
 /** 列名 = 字段名（当前界面语言标签）。 */
 const columns = computed(() => generatedFields.value.map((id) => t(`testDataGenerator.fields.${id}`)))
@@ -205,7 +245,7 @@ async function generate(): Promise<void> {
   error.value = ''
   generating.value = true
   try {
-    const outcome = await generateRows({
+    const outcome = await generateSeeded({
       fields: selectedFields.value,
       count,
       locale: dataLocale.value,
@@ -213,16 +253,35 @@ async function generate(): Promise<void> {
       datetimeTo: checked.datetime ? datetimeTo.value : undefined,
       integerMin: checked.integer && integerMinRaw.value.trim() !== '' ? Number(integerMinRaw.value) : undefined,
       integerMax: checked.integer && integerMaxRaw.value.trim() !== '' ? Number(integerMaxRaw.value) : undefined,
+      seed: seedRaw.value.trim() === '' ? undefined : seedRaw.value,
     })
     if (outcome.ok) {
       rows.value = outcome.rows
       generatedFields.value = [...selectedFields.value]
+      usedSeed.value = outcome.seed
+      seedCopied.value = false
     } else {
       error.value = errorText(outcome.error)
     }
   } finally {
     generating.value = false
   }
+}
+
+// ---- 种子复现交互（票据 11）：骰子 = 派生随机 seed 预填；复制 = 独立复制 seed ----
+
+/** 骰子按钮：用派生入口取随机 seed 预填输入框（与「留空派生」共用 rng.ts 唯一随机调用点）。 */
+function rollSeed(): void {
+  seedRaw.value = formatSeed(deriveRandomSeed())
+}
+
+function copySeed(): void {
+  if (usedSeed.value === null) return
+  void navigator.clipboard.writeText(formattedSeed.value)
+  seedCopied.value = true
+  setTimeout(() => {
+    seedCopied.value = false
+  }, 1500)
 }
 
 // ---- 导出：输出命名 basename + 扩展名（无文件输入，固定基名） ----
@@ -253,6 +312,8 @@ async function exportCsv(): Promise<void> {
 function clearResults(): void {
   rows.value = []
   generatedFields.value = []
+  usedSeed.value = null
+  seedCopied.value = false
   error.value = ''
 }
 </script>
@@ -368,6 +429,40 @@ function clearResults(): void {
 .count-input {
   width: 110px;
   font-family: var(--font-mono);
+}
+
+.seed-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.seed-input {
+  width: 180px;
+  font-family: var(--font-mono);
+}
+
+.seed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.seed-value {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.seed-value code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
 }
 
 .controls-row {

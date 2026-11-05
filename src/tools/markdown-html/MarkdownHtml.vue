@@ -45,6 +45,16 @@
           <Download :size="16" />
           {{ t('markdownHtml.download') }}
         </button>
+        <!-- 10 票扩展：带高亮导出（默认关——关闭时输出即语义不变，仍裸
+             <pre><code>）；开启后复制/下载均为 hljs span + 自包含样式块。 -->
+        <label
+          v-if="direction === 'md-to-html'"
+          class="toggle"
+          data-test="hl-export-toggle"
+        >
+          <input v-model="hlExportOn" type="checkbox" />
+          {{ t('markdownHtml.hlExport') }}
+        </label>
         <button class="btn" data-test="clear" @click="clear">
           <Trash2 :size="16" />
           {{ t('markdownHtml.clear') }}
@@ -86,7 +96,10 @@
             <EyeOff v-else :size="16" />
             {{ previewOpen ? t('markdownHtml.previewHide') : t('markdownHtml.previewShow') }}
           </button>
-          <span v-if="highlightPreview" class="hint" data-test="hljs-note">
+          <span v-if="hlExportOn" class="hint" data-test="hl-export-note">
+            {{ t('markdownHtml.hlExportNotice') }}
+          </span>
+          <span v-else-if="highlightPreview" class="hint" data-test="hljs-note">
             {{ t('markdownHtml.highlightNotice') }}
           </span>
           <span v-else class="hint">{{ t('markdownHtml.previewHint') }}</span>
@@ -118,7 +131,7 @@ import type { ToolMeta } from '@/types/tool'
 import MarkdownHtml from './MarkdownHtml.vue'
 import { convert, loadSanitizer } from './convert'
 import type { Direction, MarkdownHtmlError } from './convert'
-import { buildHighlightedPreview, outputHasCodeBlocks } from './highlight'
+import { buildHighlightedPreview, buildStandaloneHighlightedDocument, outputHasCodeBlocks } from './highlight'
 import type { HighlightedPreview } from './highlight'
 
 const { t } = useI18n()
@@ -141,6 +154,26 @@ const copied = ref(false)
 const previewOpen = ref(false) // collapsed by default (spec §4)
 // 13 票扩展：预览路径专用高亮结果（触达加载——仅在输出含 <pre><code> 时产生）。
 const highlightPreview = ref<HighlightedPreview | null>(null)
+// 10 票扩展：带高亮导出开关，默认关（关闭时复制/下载输出即语义，仍裸
+// <pre><code>；开启且存在高亮片段时输出为自包含文档）。
+const hlExportOn = ref(false)
+
+/**
+ * 自包含高亮导出文档：仅当开关开启且高亮片段存在（md→html 且输出含代码
+ * 块）时产生；主体为已净化片段，样式块为模块自有 github 单主题（净化后
+ * 注入，见 highlight.ts）。无代码块/未开启/HTML→MD 方向 → null（复制与
+ * 下载回退为语义输出，行为与开关引入前完全一致）。
+ */
+const hlExportDoc = computed(() =>
+  hlExportOn.value && highlightPreview.value && highlightPreview.value.html
+    ? buildStandaloneHighlightedDocument(highlightPreview.value)
+    : null,
+)
+
+/** 复制/下载实际内容：带高亮导出开启且有片段时用导出文档，否则语义输出。 */
+function effectiveOutput(): string {
+  return hlExportDoc.value?.html ?? output.value
+}
 
 const outputPlaceholder = computed(() =>
   input.value.trim() === '' ? t('markdownHtml.outputEmpty') : '',
@@ -229,7 +262,7 @@ function formatError(error: MarkdownHtmlError): string {
 
 function copy() {
   if (!output.value) return
-  void navigator.clipboard.writeText(output.value)
+  void navigator.clipboard.writeText(effectiveOutput())
   copied.value = true
   setTimeout(() => {
     copied.value = false
@@ -239,7 +272,8 @@ function copy() {
 function download() {
   if (!output.value) return
   const toHtml = direction.value === 'md-to-html'
-  const blob = new Blob([output.value], {
+  // 带高亮导出开启时同为 HTML 文档（自包含样式块），文件名不变。
+  const blob = new Blob([effectiveOutput()], {
     type: toHtml ? 'text/html;charset=utf-8' : 'text/markdown;charset=utf-8',
   })
   triggerDownload(blob, toHtml ? 'converted.html' : 'converted.md')
@@ -380,6 +414,19 @@ onBeforeUnmount(() => {
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .preview {

@@ -4,7 +4,7 @@ export default {
   'zh-CN': {
     tools: {
       'color-converter': '颜色转换器',
-      'color-converterDesc': 'HEX/RGB/HSL 互转、对比度检查与六规则色板',
+      'color-converterDesc': 'HEX/RGB/HSL/OKLCH 互转、对比度检查与六规则色板',
     },
     colorConverter: {
       pick: '点击选择颜色',
@@ -12,9 +12,13 @@ export default {
       hex: 'HEX',
       rgb: 'RGB',
       hsl: 'HSL',
+      oklch: 'OKLCH',
+      oklchPlaceholder: 'oklch(62.8% 0.2577 29.23) 或 62.8% 0.2577 29.23',
       errHex: '无效的 HEX 颜色',
       errRgb: '无效的 RGB 颜色',
       errHsl: '无效的 HSL 颜色',
+      errOklch: '无效的 OKLCH 颜色',
+      clamped: '已裁剪：超出 sRGB 色域，已钳制到最近可表示色',
       errColor: '无效的颜色',
       setForeground: '设为前景',
       setBackground: '设为背景',
@@ -48,7 +52,7 @@ export default {
   en: {
     tools: {
       'color-converter': 'Color Converter',
-      'color-converterDesc': 'HEX/RGB/HSL conversion, WCAG contrast check and the six-rule harmony palette',
+      'color-converterDesc': 'HEX/RGB/HSL/OKLCH conversion, WCAG contrast check and the six-rule harmony palette',
     },
     colorConverter: {
       pick: 'Pick a color',
@@ -56,9 +60,13 @@ export default {
       hex: 'HEX',
       rgb: 'RGB',
       hsl: 'HSL',
+      oklch: 'OKLCH',
+      oklchPlaceholder: 'oklch(62.8% 0.2577 29.23) or 62.8% 0.2577 29.23',
       errHex: 'Invalid HEX color',
       errRgb: 'Invalid RGB color',
       errHsl: 'Invalid HSL color',
+      errOklch: 'Invalid OKLCH color',
+      clamped: 'Clamped: outside sRGB gamut, reduced to the nearest representable color',
       errColor: 'Invalid color',
       setForeground: 'Set as foreground',
       setBackground: 'Set as background',

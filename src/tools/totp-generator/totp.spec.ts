@@ -8,6 +8,7 @@ import {
   DEFAULT_DIGITS,
   DEFAULT_PERIOD,
   STORAGE_KEY,
+  advanceHotpCounter,
   buildOtpauthUri,
   clearRememberedEntries,
   counterAt,
@@ -18,9 +19,11 @@ import {
   hotp,
   loadRememberedEntries,
   newEntryId,
+  normalizeHotpCounterInput,
   parseOtpauthUri,
   remainingSeconds,
   saveRememberedEntries,
+  verifyHotpCode,
 } from './totp'
 import type { TotpAlgorithm, TotpEntry } from './totp'
 
@@ -297,5 +300,158 @@ describe('条目标识与工具杂项', () => {
   it('条目 id 随机且不重复', () => {
     const ids = new Set(Array.from({ length: 50 }, () => newEntryId()))
     expect(ids.size).toBe(50)
+  })
+})
+
+// ---- HOTP 计数器模式（票据 09：与 TOTP 并列的计数器驱动条目） ----
+
+/** RFC 4226 Appendix D 官方向量（secret = ASCII "12345678901234567890"，6 位）。 */
+const RFC4226_VECTORS: Array<{ counter: number; code: string }> = [
+  { counter: 0, code: '755224' },
+  { counter: 1, code: '287082' },
+  { counter: 2, code: '359152' },
+  { counter: 3, code: '969429' },
+  { counter: 4, code: '338314' },
+  { counter: 5, code: '254676' },
+  { counter: 6, code: '287922' },
+  { counter: 7, code: '162583' },
+  { counter: 8, code: '399871' },
+  { counter: 9, code: '520489' },
+]
+
+describe('RFC 4226 附录 D 官方向量（HOTP 验收）', () => {
+  for (const v of RFC4226_VECTORS) {
+    it(`counter=${v.counter} → ${v.code}`, async () => {
+      await expect(hotp(RFC_SECRET_SHA1, v.counter, 'SHA1', 6)).resolves.toBe(v.code)
+    })
+  }
+})
+
+describe('计数器驱动语义（counter 变更即重算、绝不自动步进）', () => {
+  it('码值只依赖 counter：同 counter 两次计算一致（与时刻无关）', async () => {
+    const a = await hotp(RFC_SECRET_SHA1, 7, 'SHA1', 6)
+    const b = await hotp(RFC_SECRET_SHA1, 7, 'SHA1', 6)
+    expect(a).toBe('162583')
+    expect(a).toBe(b)
+  })
+
+  it('counter 变更即重算：不同 counter 得不同码', async () => {
+    const a = await hotp(RFC_SECRET_SHA1, 7, 'SHA1', 6)
+    const b = await hotp(RFC_SECRET_SHA1, 8, 'SHA1', 6)
+    expect(a).not.toBe(b)
+  })
+
+  it('步进 = 显式 +1，且不改动原条目（绝不自动步进）', () => {
+    const entry = { counter: 41 }
+    expect(advanceHotpCounter(entry)).toBe(42)
+    expect(entry.counter).toBe(41) // 原值不动——步进是用户显式动作产生的下一个值
+    expect(advanceHotpCounter({})).toBe(1) // 缺省 counter=0 起
+  })
+
+  it('counter 手输校验：非负整数合法，其余拒绝', () => {
+    expect(normalizeHotpCounterInput('0')).toEqual({ ok: true, value: 0 })
+    expect(normalizeHotpCounterInput(' 42 ')).toEqual({ ok: true, value: 42 })
+    expect(normalizeHotpCounterInput('1000000')).toEqual({ ok: true, value: 1000000 })
+    expect(normalizeHotpCounterInput('abc').ok).toBe(false)
+    expect(normalizeHotpCounterInput('-1').ok).toBe(false)
+    expect(normalizeHotpCounterInput('1.5').ok).toBe(false)
+    expect(normalizeHotpCounterInput('').ok).toBe(false)
+    expect(normalizeHotpCounterInput('99999999999999999999').ok).toBe(false) // 超 MAX_SAFE_INTEGER
+  })
+})
+
+describe('粘码校验：精确匹配当前 counter', () => {
+  it('当前 counter 的码 → 通过；相邻 counter 的码 → 拒绝（无窗口）', async () => {
+    const current = await hotp(RFC_SECRET_SHA1, 5, 'SHA1', 6) // 254676
+    const neighbor = await hotp(RFC_SECRET_SHA1, 6, 'SHA1', 6) // 287922
+    await expect(verifyHotpCode(RFC_SECRET_SHA1, 5, 'SHA1', 6, current)).resolves.toBe(true)
+    await expect(verifyHotpCode(RFC_SECRET_SHA1, 5, 'SHA1', 6, neighbor)).resolves.toBe(false)
+    await expect(verifyHotpCode(RFC_SECRET_SHA1, 5, 'SHA1', 6, '  254676  ')).resolves.toBe(true) // 粘贴空白容错
+  })
+})
+
+describe('otpauth://hotp/ 导入与导出', () => {
+  it('hotp URI 解析：type=hotp、counter 带入，缺省参数仍取默认', () => {
+    const parsed = parseOtpauthUri(
+      'otpauth://hotp/GitHub:me%40example.com?secret=GEZDGNBVGY3TQOJQ&issuer=GitHub&counter=41&algorithm=SHA256&digits=8',
+    )
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.params).toMatchObject({
+      type: 'hotp',
+      counter: 41,
+      issuer: 'GitHub',
+      account: 'me@example.com',
+      algorithm: 'SHA256',
+      digits: 8,
+    })
+  })
+
+  it('counter 必填：缺失 → no-counter；非法（负数/非数字/非整数）→ invalid-counter', () => {
+    expect(parseOtpauthUri('otpauth://hotp/a:b?secret=GEZDGNBVGY3TQOJQ')).toMatchObject({ ok: false, reason: 'no-counter' })
+    expect(parseOtpauthUri('otpauth://hotp/a:b?secret=GEZDGNBVGY3TQOJQ&counter=abc')).toMatchObject({ ok: false, reason: 'invalid-counter' })
+    expect(parseOtpauthUri('otpauth://hotp/a:b?secret=GEZDGNBVGY3TQOJQ&counter=-1')).toMatchObject({ ok: false, reason: 'invalid-counter' })
+    expect(parseOtpauthUri('otpauth://hotp/a:b?secret=GEZDGNBVGY3TQOJQ&counter=1.5')).toMatchObject({ ok: false, reason: 'invalid-counter' })
+  })
+
+  it('totp URI 不受影响（counter 参数出现也忽略、不带 type 字段）；host 非法仍拒', () => {
+    const parsed = parseOtpauthUri('otpauth://totp/a:b?secret=GEZDGNBVGY3TQOJQ&counter=9')
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) expect(parsed.params.type).toBeUndefined() // 缺省即 totp（旧形状兼容）
+    expect(parseOtpauthUri('otpauth://other/a:b?secret=GEZDGNBVGY3TQOJQ')).toMatchObject({ ok: false, reason: 'not-otpauth' })
+  })
+
+  it('buildOtpauthUri hotp 形态：otpauth://hotp/ + counter=，不带 period；回环解析一致', () => {
+    const uri = buildOtpauthUri({
+      issuer: 'GitHub',
+      account: 'me@example.com',
+      secret: 'GEZDGNBVGY3TQOJQ',
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30, // totp 字段，hotp 导出时忽略
+      type: 'hotp',
+      counter: 41,
+    })
+    expect(uri.startsWith('otpauth://hotp/')).toBe(true)
+    expect(uri).not.toContain('period=')
+    expect(uri).toContain('counter=41')
+    const parsed = parseOtpauthUri(uri)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.params).toMatchObject({ type: 'hotp', counter: 41, account: 'me@example.com' })
+  })
+})
+
+describe('HOTP 条目持久化（记住条目 opt-in 沿用）', () => {
+  it('remember=true 的 HOTP 条目入库后 type 与 counter 完整还原', () => {
+    saveRememberedEntries([
+      {
+        id: newEntryId(),
+        issuer: 'GitHub',
+        account: 'me@example.com',
+        secret: 'GEZDGNBVGY3TQOJQ',
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        remember: true,
+        type: 'hotp',
+        counter: 41,
+      },
+    ])
+    const loaded = loadRememberedEntries()
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]).toMatchObject({ type: 'hotp', counter: 41 })
+    clearRememberedEntries()
+  })
+
+  it('旧版存储（无 type/counter 字段）按 TOTP 条目兼容加载', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([{ id: 'x', issuer: '', account: 'a', secret: 'GEZDGNBVGY3TQOJQ', algorithm: 'SHA1', digits: 6, period: 30, remember: true }]),
+    )
+    const loaded = loadRememberedEntries()
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]!.type ?? 'totp').toBe('totp')
+    clearRememberedEntries()
   })
 })

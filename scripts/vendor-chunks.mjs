@@ -38,7 +38,7 @@ export const VENDOR_BUDGETS_KB = {
   'vendor-jsonrepair': 5, // 03: measured 3.0 KB gz on jsonrepair@3.15.0
   'vendor-xml-formatter': 3, // 04: measured 2.0 KB gz on xml-formatter@3.7.0
   'vendor-fast-xml-parser': 30, // 05: fxp parser+builder combo measured 26.1 KB gz
-  'vendor-smol-toml': 1.5, // 10: measured 999 B gz on smol-toml@1.9.1
+  'vendor-smol-toml': 8, // 10: 事实修正——票据 999 B 实测的是 dist 壳（re-export）；真实按需块 min+gz ≈5.9–6.6 KB，票据 Comments 已勘误
   'vendor-bip39': 16, // 07: core+wordlist+noble-hashes measured ~14 KB gz + margin
 }
 

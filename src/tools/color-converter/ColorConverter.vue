@@ -60,6 +60,25 @@
             />
             <p v-if="hslError" class="error" data-test="hsl-error">{{ hslError }}</p>
           </div>
+          <!-- 10 票扩展：OKLCH 第四空间入四向联动。接受 oklch() 串粘贴与
+               裸 L/C/H 三分量；色域外输入经色域裁剪并显式标注「已裁剪」。 -->
+          <div class="field">
+            <label class="label" for="cc-oklch">{{ t('colorConverter.oklch') }}</label>
+            <input
+              id="cc-oklch"
+              v-model="oklchText"
+              class="input mono"
+              :class="{ invalid: oklchError }"
+              :placeholder="t('colorConverter.oklchPlaceholder')"
+              data-test="oklch-input"
+              spellcheck="false"
+              @input="queueOklch"
+            />
+            <p v-if="oklchError" class="error" data-test="oklch-error">{{ oklchError }}</p>
+            <p v-if="oklchClamped" class="clamped-note" data-test="oklch-clamped">
+              {{ t('colorConverter.clamped') }}
+            </p>
+          </div>
         </div>
         <div class="actions">
           <button class="btn" data-test="set-foreground" @click="useAsForeground">
@@ -177,6 +196,7 @@ import {
   wcagLevels,
 } from './color'
 import type { RgbColor } from './color'
+import { formatOklch, parseOklch } from './oklch'
 import { PALETTE_RULES, buildPalette, paletteHex, swatchTooltip } from './palette'
 import type { PaletteRuleId } from './palette'
 
@@ -185,22 +205,26 @@ const { t } = useI18n()
 const toolMeta: ToolMeta = {
   id: 'color-converter',
   name: '颜色转换器',
-  description: 'HEX/RGB/HSL 互转、对比度检查与六规则色板',
+  description: 'HEX/RGB/HSL/OKLCH 互转、对比度检查与六规则色板',
   category: 'generate',
   icon: 'Palette',
   component: ColorConverter,
-  keywords: ['color', 'hex', 'rgb', 'hsl', 'wcag', 'contrast', 'palette', '色板', '颜色'],
+  keywords: ['color', 'hex', 'rgb', 'hsl', 'oklch', 'oklab', 'wcag', 'contrast', 'palette', '色板', '颜色'],
 }
 
-// ---- 规范色与三个色式文本框的双向同步 ----
+// ---- 规范色与四个色式文本框的双向同步 ----
 
 const current = ref<RgbColor>({ r: 255, g: 0, b: 0, a: 1 })
 const hexText = ref('')
 const rgbText = ref('')
 const hslText = ref('')
+const oklchText = ref('')
 const hexError = ref('')
 const rgbError = ref('')
 const hslError = ref('')
+const oklchError = ref('')
+// 10 票扩展：OKLCH 输入触达色域裁剪时的显式标注（仅由 oklch 输入置位）。
+const oklchClamped = ref(false)
 
 /** 输入防抖：非法输入只标记当前框，其余框保留上一个合法值。 */
 const DEBOUNCE_MS = 250
@@ -219,7 +243,7 @@ onUnmounted(() => {
   if (paletteCopyTimer !== undefined) clearTimeout(paletteCopyTimer)
 })
 
-function setColor(color: RgbColor, source: 'hex' | 'rgb' | 'hsl' | 'external'): void {
+function setColor(color: RgbColor, source: 'hex' | 'rgb' | 'hsl' | 'oklch' | 'external'): void {
   current.value = color
   if (source !== 'hex') {
     hexText.value = formatHex(color)
@@ -233,6 +257,12 @@ function setColor(color: RgbColor, source: 'hex' | 'rgb' | 'hsl' | 'external'): 
     hslText.value = formatHsl(color)
     hslError.value = ''
   }
+  if (source !== 'oklch') {
+    oklchText.value = formatOklch(color)
+    oklchError.value = ''
+  }
+  // 色域裁剪标注只描述 oklch 输入本身：其余来源都是域内 8-bit 色。
+  if (source !== 'oklch') oklchClamped.value = false
 }
 
 function applyHex(): void {
@@ -250,10 +280,20 @@ function applyHsl(): void {
   if (res.ok) setColor(res.color, 'hsl')
   else hslError.value = t('colorConverter.errHsl')
 }
+function applyOklch(): void {
+  const res = parseOklch(oklchText.value)
+  if (res.ok) {
+    setColor(res.color, 'oklch')
+    oklchClamped.value = res.clamped
+  } else {
+    oklchError.value = t('colorConverter.errOklch')
+  }
+}
 
 const queueHex = deferred(applyHex)
 const queueRgb = deferred(applyRgb)
 const queueHsl = deferred(applyHsl)
+const queueOklch = deferred(applyOklch)
 
 setColor(current.value, 'external')
 
@@ -439,8 +479,14 @@ async function copyPaletteHex(ruleId: PaletteRuleId, index: number, color: RgbCo
 
 .fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-md);
+}
+
+@media (max-width: 1040px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -505,6 +551,13 @@ async function copyPaletteHex(ruleId: PaletteRuleId, index: number, color: RgbCo
   color: var(--error);
   font-size: 12px;
   margin: 0;
+}
+
+/* 色域裁剪标注：提示色而非错误色（裁剪是声明性行为，不是失败） */
+.clamped-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warning, #b8860b);
 }
 
 .actions {

@@ -11,11 +11,11 @@ import JsonYamlPanel from './JsonYamlPanel.vue'
 
 const toolMeta: ToolMeta = {
   id: 'json-yaml',
-  name: 'JSON↔YAML 互转',
-  description: '在本地进行 JSON 与 YAML 双向转换',
+  name: 'JSON · YAML · TOML 互转',
+  description: '在本地进行 JSON、YAML 与 TOML 双向转换',
   category: 'convert',
   icon: 'FileJson2',
   component: JsonYamlPanel,
-  keywords: ['json', 'yaml', 'convert', 'serialize', '互转', '转换']
+  keywords: ['json', 'yaml', 'toml', 'convert', 'serialize', '互转', '转换']
 }
 </script>

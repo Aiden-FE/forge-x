@@ -132,6 +132,9 @@ export async function generateTotp(params: {
 
 // ---- otpauth:// URI ----
 
+/** 条目类型：TOTP（时间驱动）或 HOTP（计数器驱动，见 CONTEXT.md「计数器驱动」）。 */
+export type OtpauthType = 'totp' | 'hotp'
+
 export interface OtpauthParams {
   issuer: string
   account: string
@@ -140,9 +143,19 @@ export interface OtpauthParams {
   algorithm: TotpAlgorithm
   digits: number
   period: number
+  /** 'hotp' 时携带；缺省视为 'totp'（与既有调用方/旧存储兼容）。 */
+  type?: OtpauthType
+  /** HOTP 条目当前计数器；type='hotp' 时有意义。 */
+  counter?: number
 }
 
-export type OtpauthParseError = 'not-otpauth' | 'no-secret' | 'invalid-secret' | 'invalid-params'
+export type OtpauthParseError =
+  | 'not-otpauth'
+  | 'no-secret'
+  | 'invalid-secret'
+  | 'invalid-params'
+  | 'no-counter'
+  | 'invalid-counter'
 
 export type OtpauthParseResult =
   | { ok: true; params: OtpauthParams }
@@ -151,6 +164,8 @@ export type OtpauthParseResult =
 /**
  * otpauth:// URI 整段解析：issuer 取 query `issuer=` 优先、label 前缀 `Issuer:account` 兜底；
  * algorithm/digits/period 带入并校验（SHA1|SHA256|SHA512 / 6|8 / 30|60），非法参数整条报错。
+ * `otpauth://hotp/` 为计数器条目：counter 必填（缺失 no-counter、非法 invalid-counter），
+ * period 对 HOTP 无意义（出现也忽略）。
  */
 export function parseOtpauthUri(uri: string): OtpauthParseResult {
   let url: URL
@@ -159,9 +174,10 @@ export function parseOtpauthUri(uri: string): OtpauthParseResult {
   } catch {
     return { ok: false, reason: 'not-otpauth' }
   }
-  if (url.protocol !== 'otpauth:' || url.host !== 'totp') {
+  if (url.protocol !== 'otpauth:' || (url.host !== 'totp' && url.host !== 'hotp')) {
     return { ok: false, reason: 'not-otpauth' }
   }
+  const type: OtpauthType = url.host === 'hotp' ? 'hotp' : 'totp'
   // label：decodeURIComponent 容错（未编码的冒号也接受）
   let label = ''
   try {
@@ -187,6 +203,15 @@ export function parseOtpauthUri(uri: string): OtpauthParseResult {
   const period = normalizePeriod(url.searchParams.get('period'))
   if (url.searchParams.get('period') !== null && period === null) return { ok: false, reason: 'invalid-params' }
 
+  let counter: number | undefined
+  if (type === 'hotp') {
+    const counterRaw = url.searchParams.get('counter')
+    if (counterRaw === null) return { ok: false, reason: 'no-counter' }
+    const normalized = normalizeHotpCounterInput(counterRaw)
+    if (!normalized.ok) return { ok: false, reason: 'invalid-counter' }
+    counter = normalized.value
+  }
+
   return {
     ok: true,
     params: {
@@ -196,11 +221,13 @@ export function parseOtpauthUri(uri: string): OtpauthParseResult {
       algorithm: algorithm ?? DEFAULT_ALGORITHM,
       digits: digits ?? DEFAULT_DIGITS,
       period: period ?? DEFAULT_PERIOD,
+      // totp 结果保持既有六字段形状（type/counter 仅 hotp 携带，缺省即 totp）
+      ...(type === 'hotp' ? { type, counter } : {}),
     },
   }
 }
 
-/** 生成 otpauth:// URI（复制迁移用：去 QR 工具生成二维码；本工具不内嵌 QR）。 */
+/** 生成 otpauth:// URI（QR 展示/复制迁移用）。HOTP 形态带 counter、不带 period。 */
 export function buildOtpauthUri(params: OtpauthParams): string {
   const label = params.issuer ? `${params.issuer}:${params.account}` : params.account
   const query = new URLSearchParams({
@@ -209,8 +236,41 @@ export function buildOtpauthUri(params: OtpauthParams): string {
   if (params.issuer) query.set('issuer', params.issuer)
   query.set('algorithm', params.algorithm)
   query.set('digits', String(params.digits))
+  if (params.type === 'hotp') {
+    query.set('counter', String(params.counter ?? 0))
+    return `otpauth://hotp/${encodeURIComponent(label)}?${query.toString()}`
+  }
   query.set('period', String(params.period))
   return `otpauth://totp/${encodeURIComponent(label)}?${query.toString()}`
+}
+
+/** counter 手输/URI 参数校验：非负整数（≤ MAX_SAFE_INTEGER），其余拒绝。 */
+export function normalizeHotpCounterInput(raw: string): { ok: true; value: number } | { ok: false } {
+  const trimmed = raw.trim()
+  if (!/^\d+$/.test(trimmed)) return { ok: false }
+  const value = Number(trimmed)
+  if (!Number.isSafeInteger(value)) return { ok: false }
+  return { ok: true, value }
+}
+
+/**
+ * 步进口径：返回 counter+1 的**下一个值**，不改原条目——步进只能是用户的显式动作
+ * （按钮点击后由调用方赋值），自动步进是失步事故之源（CONTEXT.md「计数器驱动」_Avoid_）。
+ */
+export function advanceHotpCounter(entry: { counter?: number }): number {
+  return (entry.counter ?? 0) + 1
+}
+
+/** 粘码校验：精确匹配当前 counter（无 ±1 窗口——窗口重同步出界）；粘贴空白容错。 */
+export async function verifyHotpCode(
+  secretBytes: Uint8Array,
+  counter: number,
+  algorithm: TotpAlgorithm,
+  digits: number,
+  code: string,
+): Promise<boolean> {
+  const expected = await hotp(secretBytes, counter, algorithm, digits)
+  return code.trim() === expected
 }
 
 function normalizeAlgorithm(raw: string | null): TotpAlgorithm | null {
@@ -244,6 +304,10 @@ export interface TotpEntry {
   period: number
   /** 记住条目：显式 opt-in 明文本地持久化。 */
   remember: boolean
+  /** 'hotp' 为计数器驱动条目；缺省 'totp'（旧存储/既有调用方兼容）。 */
+  type?: OtpauthType
+  /** HOTP 条目当前计数器（计数器驱动：变更即重算、绝不自动步进）。 */
+  counter?: number
 }
 
 /** 条目标识口径：issuer + 账户名（缺一侧不出现悬空分隔符）。 */
@@ -273,11 +337,11 @@ export function loadRememberedEntries(): TotpEntry[] {
   }
 }
 
-/** opt-in 持久化：仅 remember=true 的条目入库。 */
+/** opt-in 持久化：仅 remember=true 的条目入库（HOTP 条目连带 type/counter）。 */
 export function saveRememberedEntries(entries: TotpEntry[]): void {
   const remembered = entries
     .filter((e) => e.remember)
-    .map(({ id, issuer, account, secret, algorithm, digits, period, remember }) => ({
+    .map(({ id, issuer, account, secret, algorithm, digits, period, remember, type, counter }) => ({
       id,
       issuer,
       account,
@@ -286,6 +350,7 @@ export function saveRememberedEntries(entries: TotpEntry[]): void {
       digits,
       period,
       remember,
+      ...(type === 'hotp' ? { type, counter: counter ?? 0 } : {}),
     }))
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(remembered))
@@ -309,6 +374,13 @@ function normalizeStoredEntry(item: unknown): TotpEntry | null {
   if (typeof e.secret !== 'string' || e.secret.length === 0) return null
   const decoded = decodeBase32(e.secret)
   if (!decoded.ok) return null
+  const type: OtpauthType = e.type === 'hotp' ? 'hotp' : 'totp'
+  const counterNormalized =
+    type === 'hotp' && typeof e.counter === 'number' && Number.isSafeInteger(e.counter) && e.counter >= 0
+      ? e.counter
+      : type === 'hotp'
+        ? 0
+        : undefined
   return {
     id: typeof e.id === 'string' ? e.id : newEntryId(),
     issuer: typeof e.issuer === 'string' ? e.issuer : '',
@@ -318,6 +390,8 @@ function normalizeStoredEntry(item: unknown): TotpEntry | null {
     digits: normalizeDigits(typeof e.digits === 'number' ? String(e.digits) : null) ?? DEFAULT_DIGITS,
     period: normalizePeriod(typeof e.period === 'number' ? String(e.period) : null) ?? DEFAULT_PERIOD,
     remember: true,
+    type,
+    ...(type === 'hotp' ? { counter: counterNormalized } : {}),
   }
 }
 

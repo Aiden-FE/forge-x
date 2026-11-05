@@ -7,8 +7,10 @@
  *   英文路径用本目录 enWords.ts 轻量合成词表；
  * - 结构真实（Structural Validity）：身份证校验位、银行卡 Luhn、手机号段必须
  *   能通过被测系统校验；数据是合成的、明确标注非真实的；
- * - 生成类非实时：显式「生成」按钮触发，同一批内各字段独立随机（Math.random，
- *   不做种子复现）；Rng 注入仅为测试确定性。
+ * - 种子复现（Seed Replay，票据 11）：同 seed + 同配置 + 同 ForgeX 版本 →
+ *   输出逐字节一致。mulberry32（rng.ts）为唯一随机源，全部字段（含 en/zh
+ *   词表字段）统一走注入 Rng，生成路径无时钟读取（默认日期区间为固定常量）；
+ *   词表/字段/默认区间升级破坏序列属已声明行为。
  *
  * 结构类字段（手机号/身份证号/银行卡号）固定为大陆结构口径，不随数据语言换轨；
  * 数据语言作用于自然语言字段（姓名/邮箱/地址/公司名/Lorem 段落）。
@@ -17,6 +19,7 @@
 import type { Rng } from './cnId'
 import { generateIdCard } from './cnId'
 import { generateBankCard } from './bankCard'
+import { deriveRandomSeed, mulberry32, parseSeedHex } from './rng'
 import { CITIES, COMPANY_NOUNS, COMPANY_PREFIXES, COMPANY_SUFFIXES, FIRST_NAMES, LAST_NAMES, LOREM_WORDS, STREETS } from './enWords'
 import {
   ZH_CITY_NAMES,
@@ -83,7 +86,7 @@ export interface GenerateOptions {
   fields: FieldId[]
   count: number
   locale: DataLocale
-  /** 日期时间可选范围（'YYYY-MM-DD'；空/未选走默认区间 2000-01-01 → 今日） */
+  /** 日期时间可选范围（'YYYY-MM-DD'；空/未选走固定默认区间，见 DEFAULT_DATETIME_FROM/TO） */
   datetimeFrom?: string
   datetimeTo?: string
   /** 整数可选范围（默认 0–999999） */
@@ -91,24 +94,39 @@ export interface GenerateOptions {
   integerMax?: number
 }
 
+/** 生产请求 = 生成选项 + seed 输入（票据 11 种子复现）。 */
+export interface GenerateRequest extends GenerateOptions {
+  /**
+   * seed 输入：十六进制 8 位（32-bit，可带 0x 前缀、大小写不敏感）；
+   * 空白/未填 = 内部随机派生（rng.ts 唯一 Math.random 调用点）。
+   */
+  seed?: string
+}
+
 export type GenerateError =
   | 'no-fields'
   | 'invalid-count'
   | 'invalid-datetime-range'
   | 'invalid-integer-range'
+  | 'invalid-seed'
 
 export type GenerateOutcome =
   | { ok: true; rows: Record<FieldId, string>[] }
   | { ok: false; error: GenerateError }
 
-// ---- 数据语言提供者 ----
+/** 生产入口结果：成功一律携带所用 seed（生成即携带 seed，没有不可复现的生成）。 */
+export type SeededOutcome =
+  | { ok: true; rows: Record<FieldId, string>[]; seed: number }
+  | { ok: false; error: GenerateError }
+
+// ---- 数据语言提供者（随机源一律注入：种子复现链路，票据 11 前置重构） ----
 
 interface LocaleProvider {
-  name(): string
-  email(): string
-  address(): string
-  company(): string
-  lorem(): string
+  name(rng: Rng): string
+  email(rng: Rng): string
+  address(rng: Rng): string
+  company(rng: Rng): string
+  lorem(rng: Rng): string
 }
 
 /** Lorem 段落的常用汉字池（随机取字合成，标注非语义文本；CONTEXT.md 数据语言）。 */
@@ -152,21 +170,21 @@ function enLorem(rng: Rng): string {
 
 function makeEnProvider(): LocaleProvider {
   return {
-    name: () => `${pick(Math.random, FIRST_NAMES)} ${pick(Math.random, LAST_NAMES)}`,
-    email: () => {
-      const first = pick(Math.random, FIRST_NAMES).toLowerCase()
-      const last = pick(Math.random, LAST_NAMES).toLowerCase()
-      const n = randomInt(Math.random, 10, 999)
+    name: (rng) => `${pick(rng, FIRST_NAMES)} ${pick(rng, LAST_NAMES)}`,
+    email: (rng) => {
+      const first = pick(rng, FIRST_NAMES).toLowerCase()
+      const last = pick(rng, LAST_NAMES).toLowerCase()
+      const n = randomInt(rng, 10, 999)
       // RFC 2606 保留域，杜绝投递真实邮件
       return `${first}.${last}${n}@example.com`
     },
-    address: () => {
-      const [city, state] = pick(Math.random, CITIES)
-      return `${randomInt(Math.random, 1, 9999)} ${pick(Math.random, STREETS)}, ${city}, ${state} ${String(randomInt(Math.random, 1, 99999)).padStart(5, '0')}`
+    address: (rng) => {
+      const [city, state] = pick(rng, CITIES)
+      return `${randomInt(rng, 1, 9999)} ${pick(rng, STREETS)}, ${city}, ${state} ${String(randomInt(rng, 1, 99999)).padStart(5, '0')}`
     },
-    company: () =>
-      `${pick(Math.random, COMPANY_PREFIXES)} ${pick(Math.random, COMPANY_NOUNS)} ${pick(Math.random, COMPANY_SUFFIXES)}`,
-    lorem: () => enLorem(Math.random),
+    company: (rng) =>
+      `${pick(rng, COMPANY_PREFIXES)} ${pick(rng, COMPANY_NOUNS)} ${pick(rng, COMPANY_SUFFIXES)}`,
+    lorem: (rng) => enLorem(rng),
   }
 }
 
@@ -179,31 +197,31 @@ function makeEnProvider(): LocaleProvider {
  */
 export function loadZhProvider(): Promise<LocaleProvider> {
   return Promise.resolve({
-    name: () => `${pick(Math.random, ZH_LAST_NAMES)}${pick(Math.random, ZH_FIRST_NAMES)}`,
-    email: () => {
+    name: (rng) => `${pick(rng, ZH_LAST_NAMES)}${pick(rng, ZH_FIRST_NAMES)}`,
+    email: (rng) => {
       // 随机 ASCII 句柄 + RFC 2606 保留域，杜绝投递真实邮件（与 en 路径同口径）
-      const n = randomInt(Math.random, 10, 999)
+      const n = randomInt(rng, 10, 999)
       let handle = ''
-      for (let i = 0, len = randomInt(Math.random, 3, 8); i < len; i++) {
-        handle += String.fromCharCode(97 + randomInt(Math.random, 0, 25))
+      for (let i = 0, len = randomInt(rng, 3, 8); i < len; i++) {
+        handle += String.fromCharCode(97 + randomInt(rng, 0, 25))
       }
       return `${handle}${n}@example.com`
     },
-    address: () => {
+    address: (rng) => {
       // 构成沿用上游 postal_address pattern：{{state}}{{city}}{{streetAddress}}
-      const street = `${pick(Math.random, ZH_LAST_NAMES)}${pick(Math.random, ZH_STREET_SUFFIXES)}${randomInt(Math.random, 1, 99999)}号`
+      const street = `${pick(rng, ZH_LAST_NAMES)}${pick(rng, ZH_STREET_SUFFIXES)}${randomInt(rng, 1, 99999)}号`
       const secondary =
-        Math.random() < 0.3
-          ? pick(Math.random, ZH_SECONDARY_ADDRESSES).replace('###', String(randomInt(Math.random, 1, 999)))
+        rng() < 0.3
+          ? pick(rng, ZH_SECONDARY_ADDRESSES).replace('###', String(randomInt(rng, 1, 999)))
           : ''
-      return `${pick(Math.random, ZH_STATES)}${pick(Math.random, ZH_CITY_NAMES)}${street}${secondary}`
+      return `${pick(rng, ZH_STATES)}${pick(rng, ZH_CITY_NAMES)}${street}${secondary}`
     },
-    company: () => {
+    company: (rng) => {
       // 构成沿用上游 name_pattern：{{location.city|state}}{{person.firstName}}{{category}}{{legal_entity_type}}
-      const region = pick(Math.random, [...ZH_CITY_NAMES, ...ZH_STATES])
-      return `${region}${pick(Math.random, ZH_FIRST_NAMES)}${pick(Math.random, ZH_COMPANY_CATEGORIES)}${pick(Math.random, ZH_COMPANY_ENTITY_TYPES)}`
+      const region = pick(rng, [...ZH_CITY_NAMES, ...ZH_STATES])
+      return `${region}${pick(rng, ZH_FIRST_NAMES)}${pick(rng, ZH_COMPANY_CATEGORIES)}${pick(rng, ZH_COMPANY_ENTITY_TYPES)}`
     },
-    lorem: () => zhLorem(Math.random),
+    lorem: (rng) => zhLorem(rng),
   })
 }
 
@@ -270,12 +288,20 @@ export function parseDateInput(value: string | undefined): number | null {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/**
+ * 默认日期区间（固定常量）：生成路径不读时钟，同 seed 同配置跨日仍逐字节一致
+ * （票据 11「无时钟泄漏」锚）。v0.4.0 曾为「→ 今日」，属已声明行为变更；
+ * 常量取值随版本演进时按「版本升级破坏序列」口径声明。
+ */
+export const DEFAULT_DATETIME_FROM = '2000-01-01'
+export const DEFAULT_DATETIME_TO = '2029-12-31'
+
 export function formatDateTime(ms: number): string {
   const d = new Date(ms)
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`
 }
 
-/** 解析日期范围 → [fromMs(含当日 00:00:00), toMs(含当日 23:59:59)]；空端走默认。 */
+/** 解析日期范围 → [fromMs(含当日 00:00:00), toMs(含当日 23:59:59)]；空端走固定默认。 */
 function resolveDatetimeRange(
   from: string | undefined,
   to: string | undefined,
@@ -285,17 +311,30 @@ function resolveDatetimeRange(
   // 任一端显式给出但非法 → 视为范围错误（UI 错误态），不静默回退
   if (from !== undefined && from.trim() !== '' && fromMs === null) return null
   if (to !== undefined && to.trim() !== '' && toMs === null) return null
-  const start = fromMs ?? Date.UTC(2000, 0, 1)
-  const end = toMs === null ? Date.now() : toMs + DAY_MS - 1
+  const start = fromMs ?? parseDateInput(DEFAULT_DATETIME_FROM)!
+  const end = (toMs ?? parseDateInput(DEFAULT_DATETIME_TO)!) + DAY_MS - 1
   if (start > end) return null
   return [start, end]
 }
 
 // ---- 生成主入口 ----
 
+/**
+ * 字段序归一：按字段目录序（FIELDS）去重排序——生成顺序固定为目录序，
+ * 同 seed + 同字段集合不因勾选/传入顺序改变随机消费序列（票据 11）。
+ */
+function normalizeFields(fields: readonly FieldId[]): FieldId[] {
+  const selected = new Set(fields)
+  return FIELDS.filter((f) => selected.has(f.id)).map((f) => f.id)
+}
+
+/**
+ * 确定性生成核心：输出是 (options, rng) 的纯函数（无时钟、无隐藏随机源）。
+ * 生产路径走 generateSeeded（种子复现）；本函数保留 Rng 注入供测试与复用。
+ */
 export async function generateRows(
   options: GenerateOptions,
-  rng: Rng = Math.random,
+  rng?: Rng,
 ): Promise<GenerateOutcome> {
   if (options.fields.length === 0) return { ok: false, error: 'no-fields' }
   const count = validateCount(options.count)
@@ -310,55 +349,76 @@ export async function generateRows(
     return { ok: false, error: 'invalid-integer-range' }
   }
 
+  const r = rng ?? mulberry32(deriveRandomSeed())
+  const fields = normalizeFields(options.fields)
   const provider = await makeProvider(options.locale)
   const [dtStart, dtEnd] = datetimeRange
 
   const rows: Record<FieldId, string>[] = []
   for (let i = 0; i < count; i++) {
     const row = {} as Record<FieldId, string>
-    for (const field of options.fields) {
+    for (const field of fields) {
       switch (field) {
         case 'name':
-          row.name = provider.name()
+          row.name = provider.name(r)
           break
         case 'phone':
-          row.phone = generateMobile(rng)
+          row.phone = generateMobile(r)
           break
         case 'email':
-          row.email = provider.email()
+          row.email = provider.email(r)
           break
         case 'address':
-          row.address = provider.address()
+          row.address = provider.address(r)
           break
         case 'company':
-          row.company = provider.company()
+          row.company = provider.company(r)
           break
         case 'datetime':
-          row.datetime = formatDateTime(dtStart + Math.floor(rng() * (dtEnd - dtStart + 1)))
+          row.datetime = formatDateTime(dtStart + Math.floor(r() * (dtEnd - dtStart + 1)))
           break
         case 'ipv4':
-          row.ipv4 = generateIpv4(rng)
+          row.ipv4 = generateIpv4(r)
           break
         case 'url':
-          row.url = generateUrl(rng)
+          row.url = generateUrl(r)
           break
         case 'integer':
-          row.integer = String(randomInt(rng, intMin, intMax))
+          row.integer = String(randomInt(r, intMin, intMax))
           break
         case 'idCard':
-          row.idCard = generateIdCard(rng).number
+          row.idCard = generateIdCard(r).number
           break
         case 'bankCard':
-          row.bankCard = generateBankCard(rng)
+          row.bankCard = generateBankCard(r)
           break
         case 'lorem':
-          row.lorem = provider.lorem()
+          row.lorem = provider.lorem(r)
           break
       }
     }
     rows.push(row)
   }
   return { ok: true, rows }
+}
+
+/**
+ * 生产入口（票据 11 种子复现）：解析/派生 seed → mulberry32 → 确定性生成。
+ * seed 留空 = 内部随机派生（rng.ts 唯一 Math.random 调用点）；成功一律携带
+ * 所用 seed 供展示；非法 seed 输入只错该处（invalid-seed），不静默回退。
+ */
+export async function generateSeeded(request: GenerateRequest): Promise<SeededOutcome> {
+  const raw = request.seed
+  let seed: number
+  if (raw !== undefined && raw.trim() !== '') {
+    const parsed = parseSeedHex(raw)
+    if (parsed === null) return { ok: false, error: 'invalid-seed' }
+    seed = parsed
+  } else {
+    seed = deriveRandomSeed()
+  }
+  const outcome = await generateRows(request, mulberry32(seed))
+  return outcome.ok ? { ok: true, rows: outcome.rows, seed } : outcome
 }
 
 // ---- 导出（值一律字符串无损，先例：值无损性） ----

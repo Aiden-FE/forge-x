@@ -11,6 +11,13 @@
  * - 主题跟随应用明暗（无主题选择器）：light=github / dark=github-dark，两套
  *   都在触达时加载，由组件按主题 store 响应式切换注入哪一套。
  * - 冷门语言（不在 common 语言集内）按纯文本渲染，并在代码块旁标注「无高亮」。
+ *
+ * 带高亮导出（10 票扩展）：「带高亮导出」开关默认关（输出即语义不变）；
+ * 开启后复制/下载均为 hljs span + 自包含 <style> 块。导出文档由
+ * buildStandaloneHighlightedDocument 组装：主体复用本模块已净化的预览
+ * 片段（span/class 在 DOMPurify 默认配置下保留），<style> 为本模块在净化
+ * **之后**注入的自有静态资产（minified github 单主题，≤2 KB 发布闸）——
+ * 用户内容永远先净化、样式永远后注入，两条输入路径不交叉。
  */
 
 import type { SanitizeHtml } from './convert'
@@ -137,4 +144,51 @@ export async function buildHighlightedPreview(
     return { html: '', styles }
   }
   return { html: options.sanitize(raw), styles }
+}
+
+/* ------------------------------------------------------------------ *
+ * 带高亮导出（10 票）：自包含文档 = 已净化片段 + 静态样式块
+ * ------------------------------------------------------------------ */
+
+/** 导出样式块体积闸：github 单主题 minified ≤ 2 KB（票据锁定，发布闸）。 */
+export const HIGHLIGHT_EXPORT_STYLE_MAX_BYTES = 2 * 1024
+
+/**
+ * CSS 轻量压缩：去注释 + 折叠空白。只为样式块的体积闸服务，不做语义级
+ * 优化（选择器/值原样保留，压缩后行为等价）。
+ */
+export function minifyCss(css: string): string {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}:;,>])\s*/g, '$1')
+    .trim()
+}
+
+export interface StandaloneHighlightedDocument {
+  /** 完整自包含 HTML 文档（<!DOCTYPE html> 开头）。 */
+  html: string
+  /** 文档内 <style> 块主体（minified github 单主题）。 */
+  styleCss: string
+}
+
+/**
+ * 把已净化的高亮片段组装为自包含导出文档。纯同步函数：
+ * - 主体 = buildHighlightedPreview 产出的净化片段（span/class 经 DOMPurify
+ *   默认配置保留，script 已剥离）；
+ * - 样式 = 预览 light 主题（github 单主题，与明暗无关）minified 后注入
+ *   <head>，注入发生在净化之后，用户内容与样式资产不交叉。
+ */
+export function buildStandaloneHighlightedDocument(
+  preview: HighlightedPreview,
+): StandaloneHighlightedDocument {
+  const styleCss = minifyCss(preview.styles.light)
+  const html = [
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><style>',
+    styleCss,
+    '</style></head><body>',
+    preview.html,
+    '</body></html>',
+  ].join('')
+  return { html, styleCss }
 }

@@ -22,6 +22,9 @@ export default {
       previewHide: '收起预览',
       previewHint: '渲染经净化后的输出；折叠预览时无任何请求',
       highlightNotice: '围栏代码块仅在预览中语法高亮（跟随应用明暗）；复制/下载保持裸 <pre><code>。',
+      hlExport: '带高亮导出',
+      hlExportNotice:
+        '复制/下载输出为带 hljs 高亮标记的完整 HTML 文档（含自包含 github 单主题样式块）；关闭本开关则恢复裸 <pre><code>。',
       noHighlight: '无高亮',
       copy: '复制',
       copied: '已复制',
@@ -59,6 +62,9 @@ export default {
       previewHide: 'Hide preview',
       previewHint: 'Renders the sanitized output; no requests while collapsed',
       highlightNotice: 'Fenced code is syntax-highlighted in the preview only (follows the app theme); copy/download keeps bare <pre><code>.',
+      hlExport: 'Highlight export',
+      hlExportNotice:
+        'Copy/download produces a full HTML document with hljs markup (self-contained github single-theme style block); turn this off to restore bare <pre><code>.',
       noHighlight: 'No highlight',
       copy: 'Copy',
       copied: 'Copied',
