@@ -302,7 +302,8 @@ export function computeIpv6Subnet(value: bigint, prefix: number): Ipv6Info {
     total: 1n << BigInt(128 - prefix),
     first: network,
     last: network | wildcard,
-    isHostAddress: false,
+    // 输入地址带主机位即如实标注（analyze 传原始地址；切分传网络地址恒 false）
+    isHostAddress: (value & wildcard) !== 0n,
     scope: classifyIpv6(network),
   }
 }
@@ -316,9 +317,8 @@ export type Ipv6AnalyzeResult =
 export function analyzeIpv6(input: string): Ipv6AnalyzeResult {
   const parsed = parseIpv6Input(input)
   if (parsed.status !== 'ok') return parsed
-  const info = computeIpv6Subnet(parsed.value, parsed.prefix)
-  info.isHostAddress = parsed.isHostAddress
-  return { status: 'ok', info }
+  // isHostAddress 由 computeIpv6Subnet 按原始地址主机位直接算出（与解析层同式）
+  return { status: 'ok', info: computeIpv6Subnet(parsed.value, parsed.prefix) }
 }
 
 // ---- 格式化 ----

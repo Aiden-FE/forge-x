@@ -24,6 +24,7 @@
 
 // Type-only: never enters the bundle; the value import is dynamic (below).
 import type { XMLBuilder, XMLParser } from 'fast-xml-parser'
+import { locateXmlErrorPosition } from '@/lib/xmlWellformed'
 
 /** 粘贴（textarea）输入上限：1 MiB（UTF-8 字节计）。 */
 export const PASTE_MAX_BYTES = 1024 * 1024
@@ -73,7 +74,7 @@ export function utf8ByteLength(text: string): number {
 }
 
 /* ------------------------------------------------------------------ *
- * 良构错误行/列容忍提取（纯函数，票据 04 同款做法；本目录自持一份）
+ * 良构错误行/列容忍提取（正则组单源 src/lib/xmlWellformed.ts，与 xml-formatter 共享）
  * ------------------------------------------------------------------ */
 
 export interface XmlErrorLocation {
@@ -83,14 +84,6 @@ export interface XmlErrorLocation {
   column?: number
 }
 
-/** Chromium / happy-dom：`error on line 2 at column 11: <描述>`。 */
-const CHROMIUM_POSITION_RE = /error on line (\d+) at column (\d+)(?::\s*([^\n]*))?/i
-/** Firefox camelCase 形态：`lineNumber: 2, columnNumber: 5`。 */
-const CAMEL_POSITION_RE = /lineNumber\s*[:=]?\s*(\d+)\D{0,3}columnNumber\s*[:=]?\s*(\d+)/i
-/** WebKit / 通用形态：`line 2, column 7`。 */
-const PLAIN_POSITION_RE = /\bline\s+(\d+),?\s*column\s+(\d+)\b/i
-
-const POSITION_PATTERNS = [CHROMIUM_POSITION_RE, CAMEL_POSITION_RE, PLAIN_POSITION_RE] as const
 
 /**
  * 从 parsererror 文本中容忍提取行/列。任一形态命中即返回；全部未命中时
@@ -98,17 +91,9 @@ const POSITION_PATTERNS = [CHROMIUM_POSITION_RE, CAMEL_POSITION_RE, PLAIN_POSITI
  */
 export function locateXmlError(report: string): XmlErrorLocation {
   const firstLine = report.split(/\r?\n/).find((line) => line.trim() !== '') ?? ''
-  for (const pattern of POSITION_PATTERNS) {
-    const match = report.match(pattern)
-    if (!match) continue
-    const location: XmlErrorLocation = {
-      message: (match[3] ?? '').trim() || firstLine.trim(),
-      line: Number(match[1]),
-      column: Number(match[2]),
-    }
-    return location
-  }
-  return { message: firstLine.trim() || report.trim() }
+  const hit = locateXmlErrorPosition(report)
+  if (!hit) return { message: firstLine.trim() || report.trim() }
+  return { message: hit.message || firstLine.trim(), line: hit.line, column: hit.column }
 }
 
 /* ------------------------------------------------------------------ *

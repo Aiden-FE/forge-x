@@ -18,8 +18,13 @@
  * xml-formatter 首用 dynamic import（平台规则：第三方依赖不进首屏包）。
  */
 
+import { locateXmlErrorPosition } from '@/lib/xmlWellformed'
+
 /** 粘贴（textarea）输入上限：1 MiB，按 UTF-8 字节计。 */
 export const PASTE_MAX_BYTES = 1024 * 1024
+
+/** 实时防抖间隔（转换/校验类 300ms，附录 §2）。 */
+export const DEBOUNCE_MS = 300
 
 export type XmlToolMode = 'format' | 'minify'
 
@@ -49,7 +54,8 @@ export function exceedsPasteLimit(text: string): boolean {
 }
 
 /* ------------------------------------------------------------------ *
- * 良构校验：DOMParser 为权威 + 行/列容忍提取
+ * 良构校验：DOMParser 为权威 + 行/列容忍提取（正则组单源在
+ * src/lib/xmlWellformed.ts，与 xml-json 共享——票据 05「复用 04 权威」）
  * ------------------------------------------------------------------ */
 
 export interface XmlErrorPosition {
@@ -61,30 +67,12 @@ export interface XmlErrorPosition {
   message: string
 }
 
-// Chromium/libxml2 形态："…error on line 3 at column 8: Opening and ending tag mismatch…"
-const CHROMIUM_POSITION_RE = /error on line (\d+) at column (\d+)(?::\s*(.*))?/
-// WebKit 形态："…(line 2, column 9)…" / "…at line 2, column 9: msg…"
-const WEBKIT_POSITION_RE = /line\s+(\d+)\s*,\s*column\s+(\d+)\s*:?\s*(.*)/i
-
-function cleanMessage(raw: string | undefined): string {
-  return (raw ?? '').replace(/[)\]]+\s*$/, '').trim()
-}
-
 /**
  * parsererror 文本 → 行/列（容忍式提取，纯函数）。
- * 双正则先后尝试（Chromium 在前、更特异），均未命中返回 null（调用方降级原文展示）。
+ * 未命中任何引擎形态返回 null（调用方降级原文展示）。
  */
 export function extractParserError(text: string): XmlErrorPosition | null {
-  if (!text) return null
-  const chromium = text.match(CHROMIUM_POSITION_RE)
-  if (chromium) {
-    return { line: Number(chromium[1]), column: Number(chromium[2]), message: cleanMessage(chromium[3]) }
-  }
-  const webkit = text.match(WEBKIT_POSITION_RE)
-  if (webkit) {
-    return { line: Number(webkit[1]), column: Number(webkit[2]), message: cleanMessage(webkit[3]) }
-  }
-  return null
+  return locateXmlErrorPosition(text)
 }
 
 /**

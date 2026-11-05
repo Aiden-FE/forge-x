@@ -112,7 +112,7 @@ import ToolLayout from '@/components/ToolLayout.vue'
 import { useI18n } from '@/composables/useI18n'
 import type { ToolMeta } from '@/types/tool'
 import XmlFormatter from './XmlFormatter.vue'
-import { runXmlTool } from './xmlFormat'
+import { DEBOUNCE_MS, runXmlTool } from './xmlFormat'
 import type { IndentChoice, XmlToolError, XmlToolMode, XmlToolOutcome } from './xmlFormat'
 
 const { t } = useI18n()
@@ -135,13 +135,13 @@ const valid = ref(false)
 const errorText = ref('')
 const copied = ref(false)
 
-/** 实时防抖 300ms（转换/校验类节奏，票据 04 §交互）。 */
+/** 实时防抖（转换/校验类节奏 300ms，票据 04 §交互；常量单源在 xmlFormat.ts）。 */
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
 let runToken = 0
 
 watch([input, mode, indent], () => {
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(runNow, 300)
+  debounceTimer = setTimeout(runNow, DEBOUNCE_MS)
 })
 
 async function runNow() {
@@ -208,11 +208,14 @@ function formatErrorText(error: XmlToolError): string {
 
 /* ---------------- 输出动作 ---------------- */
 
+let copyTimer: ReturnType<typeof setTimeout> | undefined
+
 function copy() {
   if (!output.value) return
   void navigator.clipboard.writeText(output.value)
   copied.value = true
-  setTimeout(() => {
+  clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => {
     copied.value = false
   }, 1500)
 }
@@ -246,6 +249,7 @@ function clear() {
 
 onBeforeUnmount(() => {
   clearTimeout(debounceTimer)
+  clearTimeout(copyTimer)
 })
 </script>
 

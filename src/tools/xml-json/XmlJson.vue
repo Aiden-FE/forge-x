@@ -185,11 +185,14 @@ function swap() {
 
 /* ---------------- output actions ---------------- */
 
+let copyTimer: ReturnType<typeof setTimeout> | undefined
+
 function copy() {
   if (!output.value) return
   void navigator.clipboard.writeText(output.value)
   copied.value = true
-  setTimeout(() => {
+  clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => {
     copied.value = false
   }, 1500)
 }
@@ -223,6 +226,7 @@ function clear() {
 
 onBeforeUnmount(() => {
   clearTimeout(debounceTimer)
+  clearTimeout(copyTimer)
 })
 </script>
 

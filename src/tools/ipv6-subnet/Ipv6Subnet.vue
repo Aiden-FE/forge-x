@@ -295,20 +295,23 @@ function stepPrefix(delta: number): void {
   splitNewPrefix.value = Math.min(128, Math.max(min, splitNewPrefix.value + delta))
 }
 
-const splitOutcome = computed<'ok' | 'tooManySubnets' | 'notPowerOfTwo' | 'invalidTarget' | 'none'>(() => {
-  if (result.value === null) return 'none'
+/** 单次 equalSplitIpv6 计算，供 outcome 与 rows 两个投影共享（不重复调用）。 */
+const splitResult = computed<ReturnType<typeof equalSplitIpv6> | null>(() => {
+  if (result.value === null) return null
   const target =
     splitMode.value === 'count' ? { count: splitCount.value } : { newPrefix: splitNewPrefix.value }
-  const res = equalSplitIpv6(result.value.network, result.value.prefix, target)
+  return equalSplitIpv6(result.value.network, result.value.prefix, target)
+})
+
+const splitOutcome = computed<'ok' | 'tooManySubnets' | 'notPowerOfTwo' | 'invalidTarget' | 'none'>(() => {
+  if (splitResult.value === null) return 'none'
+  const res = splitResult.value
   return res.ok ? 'ok' : res.reason
 })
 
 const splitRows = computed<Ipv6SplitRow[]>(() => {
-  if (result.value === null) return []
-  const target =
-    splitMode.value === 'count' ? { count: splitCount.value } : { newPrefix: splitNewPrefix.value }
-  const res = equalSplitIpv6(result.value.network, result.value.prefix, target)
-  return res.ok ? res.rows : []
+  const res = splitResult.value
+  return res && res.ok ? res.rows : []
 })
 
 const copiedCidr = ref('')
