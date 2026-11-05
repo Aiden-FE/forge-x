@@ -3,8 +3,10 @@ import {
   DEFAULT_OPENSSL_CIPHER,
   DEFAULT_OPENSSL_KDF,
   DEFAULT_PBKDF2_ITERATIONS,
+  MAX_PBKDF2_ITERATIONS,
   decryptOpenSsl,
   evpBytesToKeyMd5,
+  normalizeOpenSslIterations,
   parseSaltedInput,
   pbkdf2KeyAndIv,
 } from './openssl'
@@ -209,5 +211,48 @@ describe('默认档位与非 ASCII 口令（辅助一致性）', () => {
     await expect(
       decryptOpenSsl({ input: bytesToBase64(envelope), passphrase, cipher: 'aes-256-cbc', kdf: 'md5' }),
     ).resolves.toEqual({ ok: true, plaintext: PLAINTEXT })
+  })
+})
+
+describe('PBKDF2 迭代数钳制（P2 修复：防巨值挂死 deriveBits / 负数小数误报）', () => {
+  it('钳制常量锚定：上限 10,000,000', () => {
+    expect(MAX_PBKDF2_ITERATIONS).toBe(10_000_000)
+  })
+
+  it('normalizeOpenSslIterations：非有限值回默认；截断取整；钳到 [1, MAX]', () => {
+    // 非有限（NaN/±∞，v-model.number 空串/越界输入的自然产物）→ 默认 10000
+    expect(normalizeOpenSslIterations(Number.NaN)).toBe(DEFAULT_PBKDF2_ITERATIONS)
+    expect(normalizeOpenSslIterations(Number.POSITIVE_INFINITY)).toBe(DEFAULT_PBKDF2_ITERATIONS)
+    expect(normalizeOpenSslIterations(Number.NEGATIVE_INFINITY)).toBe(DEFAULT_PBKDF2_ITERATIONS)
+    // 正常值原样
+    expect(normalizeOpenSslIterations(10000)).toBe(10000)
+    expect(normalizeOpenSslIterations(600000)).toBe(600000)
+    // 负数/零 → 下界 1；小数截断
+    expect(normalizeOpenSslIterations(-5)).toBe(1)
+    expect(normalizeOpenSslIterations(0)).toBe(1)
+    expect(normalizeOpenSslIterations(1.9)).toBe(1)
+    expect(normalizeOpenSslIterations(12345.7)).toBe(12345)
+    // 巨值 → 上界（手输 1e12 不再长占挂死）
+    expect(normalizeOpenSslIterations(1e12)).toBe(MAX_PBKDF2_ITERATIONS)
+  })
+
+  it('钳制经解密入口生效：iterations 传 -5 与 10000 结果一致（同一密文）', async () => {
+    const vector = CT_BASE64['aes-128-cbc']!.pbkdf2
+    const normal = await decryptOpenSsl({
+      input: vector,
+      passphrase: PASS,
+      cipher: 'aes-128-cbc',
+      kdf: 'pbkdf2',
+      iterations: DEFAULT_PBKDF2_ITERATIONS,
+    })
+    const clamped = await decryptOpenSsl({
+      input: vector,
+      passphrase: PASS,
+      cipher: 'aes-128-cbc',
+      kdf: 'pbkdf2',
+      iterations: -5, // 钳到 1 ≠ 10000，解密失败而非挂死/误报——证明钳制改写了入参
+    })
+    expect(normal.ok).toBe(true)
+    expect(clamped).toEqual({ ok: false, reason: 'decrypt-failed' })
   })
 })

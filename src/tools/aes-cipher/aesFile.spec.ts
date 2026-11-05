@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   FILE_CHUNK_BYTES,
+  FOLD_PARTS_EVERY,
   MAX_BATCH_FILES,
   MAX_FILE_BYTES,
+  MAX_NAME_BYTES,
   chunkCountFor,
   decryptFileEnvelope,
   encryptFileEnvelope,
@@ -239,5 +241,78 @@ describe('解密输出文件名净化', () => {
     expect(sanitizeFileName('/abs/path')).toBe('path')
     expect(sanitizeFileName('正常名.txt')).toBe('正常名.txt')
     expect(sanitizeFileName('..')).toBe('..') // 无分隔符时原样（非路径，无穿越面）
+  })
+})
+
+describe('产出侧折叠（P1 修复：JS 堆峰值有界，512 MiB 不再整驻内存）', () => {
+  it('FOLD_PARTS_EVERY 常量与块大小口径：32 块 × 1 MiB', () => {
+    expect(FOLD_PARTS_EVERY).toBe(32)
+    expect(FOLD_PARTS_EVERY * FILE_CHUNK_BYTES).toBe(32 * 1024 * 1024)
+  })
+
+  it('33 MiB（33 块 > 折叠批量 32）：加密 → 解密内容一致且文件名还原', async () => {
+    const data = pseudoRandomBytes(FILE_CHUNK_BYTES * 33, 0x5a)
+    // 33M 元素的 toEqual 会撑爆 worker 堆（等价性快照按索引展开）——以
+    // FNV-1a 全量哈希锚定 + 跨折叠边界（第 32/33 块交界）逐点抽查替代。
+    const hash = (bytes: Uint8Array): string => {
+      let h = 0x811c9dc5
+      for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i]!, 0x01000193) >>> 0
+      return h.toString(16)
+    }
+    const expected = hash(data)
+
+    const encrypted = await encryptFileEnvelope({ source: fakeSource(data), fileName: 'fold-big.bin', passphrase: PASS })
+    expect(encrypted.ok).toBe(true)
+    if (!encrypted.ok) return
+
+    const decrypted = await decryptFileEnvelope({ source: encrypted.blob, passphrase: PASS })
+    expect(decrypted.ok).toBe(true)
+    if (!decrypted.ok) return
+    expect(decrypted.fileName).toBe('fold-big.bin')
+    expect(decrypted.blob.size).toBe(data.length)
+    const bytes = new Uint8Array(await decrypted.blob.arrayBuffer())
+    expect(hash(bytes)).toBe(expected)
+    for (const i of [0, FILE_CHUNK_BYTES - 1, FILE_CHUNK_BYTES * 31, FILE_CHUNK_BYTES * 32, bytes.length - 1]) {
+      expect(bytes[i]).toBe(data[i])
+    }
+  }, 60_000)
+})
+
+describe('文件名长度守卫（加密侧与解析侧 MAX_NAME_BYTES 对称）', () => {
+  it('UTF-8 超 4096 字节 → name-too-long，不产出自拒信封', async () => {
+    const outcome = await encryptFileEnvelope({
+      source: fakeSource(new Uint8Array(4)),
+      fileName: 'a'.repeat(MAX_NAME_BYTES + 1),
+      passphrase: PASS,
+    })
+    expect(outcome).toEqual({ ok: false, reason: 'name-too-long' })
+  })
+
+  it('多字节同理：2048 个 CJK 字符（6144 字节）拒绝；恰 4096 字节接受', async () => {
+    const cjk = await encryptFileEnvelope({
+      source: fakeSource(new Uint8Array(4)),
+      fileName: '汉'.repeat(2048),
+      passphrase: PASS,
+    })
+    expect(cjk).toEqual({ ok: false, reason: 'name-too-long' })
+
+    const edge = await encryptFileEnvelope({
+      source: fakeSource(new Uint8Array(4)),
+      fileName: 'a'.repeat(MAX_NAME_BYTES),
+      passphrase: PASS,
+    })
+    expect(edge.ok).toBe(true)
+  })
+})
+
+describe('信封内文件名非法 UTF-8 → bad-envelope（fatal 解码，不做 U+FFFD 容忍）', () => {
+  it('坏序列 [0xC3, 0x28] 构造信封头 → 结构层拒绝', () => {
+    // 手工拼头：magic/版本/模式/salt/prefix/nameLen=2/坏名字/fileSize=0/chunkSize/chunkCount=0
+    const bytes = new Uint8Array(28 + 2 + 16)
+    bytes.set([0x46, 0x47, 0x58, 0x31, 0x02, 0x03], 0)
+    new DataView(bytes.buffer).setUint16(26, 2)
+    bytes.set([0xc3, 0x28], 28) // 0xC3 后须跟延续字节，0x28 不是 → fatal 抛
+    new DataView(bytes.buffer).setUint32(28 + 2 + 4, FILE_CHUNK_BYTES)
+    expect(parseFileEnvelopeHeader(bytes)).toEqual({ ok: false, reason: 'bad-envelope' })
   })
 })

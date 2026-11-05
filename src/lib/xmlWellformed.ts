@@ -7,6 +7,26 @@
  * 使用方：xml-formatter（extractParserError 适配层）与 xml-json（locateXmlError 适配层）。
  */
 
+/**
+ * DOMParser 结果的引擎无关投影（注入缝）：只暴露 parsererror 文本。
+ * 测试注入 Chromium/WebKit 形态的快照即可覆盖各引擎差异；生产默认实现走平台
+ * 原生 DOMParser（票据 04/05 共用的校验权威，浏览器/WebView 均内置）。
+ */
+export type ParseXml = (xml: string) => { parserErrorText: string | null }
+
+/**
+ * 生产权威：原生 DOMParser 解析 'application/xml'。
+ * parsererror 无论作为文档子元素还是根元素都能取到（getElementsByTagName
+ * 覆盖两形态，无需 querySelector + 根元素回退两条路径）。
+ */
+export function parseWithDomParser(xml: string): { parserErrorText: string | null } {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml')
+  const errorEl =
+    doc.getElementsByTagName('parsererror')[0] ??
+    (doc.documentElement?.nodeName.toLowerCase() === 'parsererror' ? doc.documentElement : null)
+  return { parserErrorText: errorEl?.textContent ?? null }
+}
+
 /** Chromium/libxml2：`error on line 3 at column 8: <描述>` */
 const CHROMIUM_POSITION_RE = /error on line (\d+) at column (\d+)(?::\s*([^\n]*))?/i
 /** Firefox：`lineNumber: 2, columnNumber: 5` */

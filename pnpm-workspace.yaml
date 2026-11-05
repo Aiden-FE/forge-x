@@ -1,2 +1,5 @@
+# 供应链豁免（v0.5.0 审查修正：标注复查期限）——fast-xml-parser@5.12.0 为票据 05
+# 锁定版本，因 minimumReleaseAge 库龄策略过新而豁免。精确 pin 已缓解投放风险；
+# 待该版本库龄满足策略（或下轮依赖升级）时移除本豁免，勿长期保留。
 minimumReleaseAgeExclude:
   - fast-xml-parser@5.12.0

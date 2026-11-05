@@ -272,6 +272,8 @@
               class="text-input narrow"
               type="number"
               min="1"
+              :max="MAX_PBKDF2_ITERATIONS"
+              step="1"
               data-test="aes-openssl-iter"
             />
             <p class="hint">{{ t('aesCipher.opensslIterHint') }}</p>
@@ -475,6 +477,7 @@ import {
   DEFAULT_OPENSSL_CIPHER,
   DEFAULT_OPENSSL_KDF,
   DEFAULT_PBKDF2_ITERATIONS,
+  MAX_PBKDF2_ITERATIONS,
   decryptOpenSsl,
 } from './openssl'
 import type { OpenSslCipher, OpenSslKdf } from './openssl'
@@ -746,10 +749,14 @@ let fileRowId = 1
 const pendingFileRows = computed(() => fileRows.value.filter((r) => r.status === 'pending').length)
 const fileSuccessCount = computed(() => fileRows.value.filter((r) => r.status === 'success').length)
 
-function fileRowErrorText(reason: 'file-too-large' | 'bad-envelope' | 'gcm-auth' | 'too-many'): string {
+function fileRowErrorText(
+  reason: 'file-too-large' | 'name-too-long' | 'bad-envelope' | 'gcm-auth' | 'too-many',
+): string {
   switch (reason) {
     case 'file-too-large':
       return t('aesCipher.fileErrTooLarge')
+    case 'name-too-long':
+      return t('aesCipher.fileErrNameTooLong')
     case 'bad-envelope':
       return t('aesCipher.fileErrBadEnvelope')
     case 'gcm-auth':

@@ -24,13 +24,15 @@
 
 // Type-only: never enters the bundle; the value import is dynamic (below).
 import type { XMLBuilder, XMLParser } from 'fast-xml-parser'
-import { locateXmlErrorPosition } from '@/lib/xmlWellformed'
+import { locateXmlErrorPosition, parseWithDomParser } from '@/lib/xmlWellformed'
 
-/** 粘贴（textarea）输入上限：1 MiB（UTF-8 字节计）。 */
-export const PASTE_MAX_BYTES = 1024 * 1024
+/** 粘贴（textarea）输入上限：1 MiB（UTF-8 字节计，共享单源 @/lib/pasteLimit）。 */
+export { PASTE_MAX_BYTES, isPasteWithinLimit, utf8ByteLength } from '@/lib/pasteLimit'
 
-/** 实时防抖间隔（规格：转换/校验类 300ms）。 */
-export const CONVERT_DEBOUNCE_MS = 300
+/** 实时防抖间隔（规格：转换/校验类 300ms，共享单源 @/lib/pasteLimit）。 */
+export { CONVERT_DEBOUNCE_MS } from '@/lib/pasteLimit'
+
+import { isPasteWithinLimit } from '@/lib/pasteLimit'
 
 export type Direction = 'xml-to-json' | 'json-to-xml'
 
@@ -57,24 +59,12 @@ export type ConversionOutcome =
   | { ok: false; error: XmlJsonError }
 
 /* ------------------------------------------------------------------ *
- * 尺寸上限（UTF-8 字节，码点安全：TextEncoder 逐码点编码精确计数）
+ * 尺寸上限（共享单源 @/lib/pasteLimit：快速路径 + 精确 UTF-8 计数）
  * ------------------------------------------------------------------ */
 
-const encoder = new TextEncoder()
-
-/** 快速路径：UTF-16 code unit 最多 3 字节（代理对 2 unit → 4 字节 = 每 unit 2 字节），
- *  长度三倍不超限必然安全，避免对短输入做完整编码。 */
-export function isPasteWithinLimit(text: string): boolean {
-  if (text.length * 3 <= PASTE_MAX_BYTES) return true
-  return utf8ByteLength(text) <= PASTE_MAX_BYTES
-}
-
-export function utf8ByteLength(text: string): number {
-  return encoder.encode(text).length
-}
-
 /* ------------------------------------------------------------------ *
- * 良构错误行/列容忍提取（正则组单源 src/lib/xmlWellformed.ts，与 xml-formatter 共享）
+ * 良构错误行/列容忍提取（正则组与 DOMParser 投影单源 src/lib/xmlWellformed.ts，
+ * 与 xml-formatter 共享）
  * ------------------------------------------------------------------ */
 
 export interface XmlErrorLocation {
@@ -152,15 +142,13 @@ export interface XmlWellFormedness {
  * 以平台原生 DOMParser 做 XML 良构前置校验（标签闭合、名字合法、实体可解析、
  * 无重复属性；不到 schema/命名空间语义）。不加载外部实体、零网络请求——
  * 无 XXE 面。行/列提取容忍引擎差异（见 locateXmlError），失败降级原文。
+ * DOMParser 投影与 xml-formatter 共享单源（@/lib/xmlWellformed parseWithDomParser）。
  */
 export function checkXmlWellFormed(xml: string): XmlWellFormedness {
-  const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  const errorEl =
-    doc.getElementsByTagName('parsererror')[0] ??
-    (doc.documentElement?.nodeName.toLowerCase() === 'parsererror' ? doc.documentElement : null)
-  if (!errorEl) return { ok: true, message: '' }
+  const { parserErrorText } = parseWithDomParser(xml)
+  if (parserErrorText === null) return { ok: true, message: '' }
 
-  const report = errorEl.textContent ?? ''
+  const report = parserErrorText
   const located = locateXmlError(report)
   return { ok: false, ...located }
 }

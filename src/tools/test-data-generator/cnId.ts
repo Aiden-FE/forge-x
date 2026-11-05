@@ -11,8 +11,8 @@
  * 种子复现口径见 CONTEXT.md：种子复现）。
  */
 
-/** 随机源：返回 [0, 1) 均匀浮点。生产与测试统一注入 PRNG（同 seed 同序列）。 */
-export type Rng = () => number
+// 随机源契约住在 rng.ts（随唯一生产随机源 mulberry32；v0.5.0 审查修正归属）
+import type { Rng } from './rng'
 
 /**
  * 省级行政区代码首两位（GB/T 2260 大陆 31 省，与身份证校验工具同口径；

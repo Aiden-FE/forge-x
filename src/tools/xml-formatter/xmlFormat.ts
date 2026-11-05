@@ -18,13 +18,16 @@
  * xml-formatter 首用 dynamic import（平台规则：第三方依赖不进首屏包）。
  */
 
-import { locateXmlErrorPosition } from '@/lib/xmlWellformed'
+import { locateXmlErrorPosition, parseWithDomParser } from '@/lib/xmlWellformed'
+import type { ParseXml } from '@/lib/xmlWellformed'
 
-/** 粘贴（textarea）输入上限：1 MiB，按 UTF-8 字节计。 */
-export const PASTE_MAX_BYTES = 1024 * 1024
+/** 粘贴（textarea）输入上限：1 MiB，按 UTF-8 字节计（共享单源 @/lib/pasteLimit）。 */
+export { PASTE_MAX_BYTES, exceedsPasteLimit, utf8ByteLength } from '@/lib/pasteLimit'
 
-/** 实时防抖间隔（转换/校验类 300ms，附录 §2）。 */
-export const DEBOUNCE_MS = 300
+/** 实时防抖间隔（转换/校验类 300ms，附录 §2，共享单源 @/lib/pasteLimit）。 */
+export { CONVERT_DEBOUNCE_MS as DEBOUNCE_MS } from '@/lib/pasteLimit'
+
+import { exceedsPasteLimit } from '@/lib/pasteLimit'
 
 export type XmlToolMode = 'format' | 'minify'
 
@@ -38,24 +41,8 @@ export function indentationFor(choice: IndentChoice): string {
 }
 
 /* ------------------------------------------------------------------ *
- * 输入上限（UTF-8 字节；码点按整体编码计数，无代理对切分问题）
- * ------------------------------------------------------------------ */
-
-const encoder = new TextEncoder()
-
-export function utf8ByteLength(text: string): number {
-  return encoder.encode(text).length
-}
-
-/** 超过 1 MiB 返回 true。快速路径：UTF-8 下每 UTF-16 码单元至多 3 字节。 */
-export function exceedsPasteLimit(text: string): boolean {
-  if (text.length * 3 <= PASTE_MAX_BYTES) return false
-  return utf8ByteLength(text) > PASTE_MAX_BYTES
-}
-
-/* ------------------------------------------------------------------ *
- * 良构校验：DOMParser 为权威 + 行/列容忍提取（正则组单源在
- * src/lib/xmlWellformed.ts，与 xml-json 共享——票据 05「复用 04 权威」）
+ * 良构校验：DOMParser 为权威 + 行/列容忍提取（正则组与 DOMParser 投影
+ * 单源在 src/lib/xmlWellformed.ts，与 xml-json 共享——票据 05「复用 04 权威」）
  * ------------------------------------------------------------------ */
 
 export interface XmlErrorPosition {
@@ -75,21 +62,8 @@ export function extractParserError(text: string): XmlErrorPosition | null {
   return locateXmlErrorPosition(text)
 }
 
-/**
- * DOMParser 结果的引擎无关投影（注入缝）：只暴露 parsererror 文本。
- * 测试注入 Chromium/WebKit 形态的快照即可覆盖各引擎差异；默认实现走平台
- * 原生 DOMParser（生产权威，浏览器/WebView 均内置）。
- */
-export type ParseXml = (xml: string) => { parserErrorText: string | null }
-
-function parseWithDomParser(xml: string): { parserErrorText: string | null } {
-  const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  let text: string | null = doc.querySelector('parsererror')?.textContent ?? null
-  if (text === null && doc.documentElement && doc.documentElement.nodeName.toLowerCase() === 'parsererror') {
-    text = doc.documentElement.textContent
-  }
-  return { parserErrorText: text }
-}
+/** 注入缝类型 re-export（spec 测试与组件经本模块引入；实现单源在 @/lib/xmlWellformed）。 */
+export type { ParseXml } from '@/lib/xmlWellformed'
 
 export interface WellformednessOutcome {
   ok: boolean

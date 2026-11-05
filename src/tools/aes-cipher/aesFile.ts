@@ -19,10 +19,15 @@
  *                 AAD = 头部全部字节 [0, 44+n)（文件名/尺寸/块数一并认证）
  *
  * 边界与语义（票据 09 / 附录 §3 §4）：
- * - 分块流式：`File.slice` 逐块读入，内存有界——绝不全量读入；
+ * - 分块流式：`File.slice` 逐块读入，读侧内存有界——绝不全量读入；产出侧
+ *   每 FOLD_PARTS_EVERY 块（32 MiB）折叠为中间 Blob（进入浏览器 blob 存储，
+ *   原始块数组可回收），JS 堆峰值有界，512 MiB 上限文件不再整驻内存；
  * - 单文件 ≤512 MiB（超限在读入前拒绝）、批量 ≤20 文件（UI 层执行）；
+ * - 文件名 UTF-8 字节 ≤ MAX_NAME_BYTES（与解密侧对称——超限即拒绝，
+ *   不产出解密侧会拒收的自拒信封；亦杜绝 uint16 nameLen 截断）；
  * - 块级认证失败 → 整体失败**单态** gcm-auth（不输出半截文件，错口令与篡改不可区分）；
- * - 解密输出原始文件名（净化为 basename，防信封内路径穿越）。
+ * - 解密输出原始文件名（净化为 basename，防信封内路径穿越；信封内文件名
+ *   非法 UTF-8 按 bad-envelope 拒绝——fatal 解码，不做 U+FFFD 替换容忍）。
  */
 
 import { GCM_TAG_BYTES, SALT_BYTES, deriveAesKeyBytes } from './aes'
@@ -33,21 +38,31 @@ export const MAX_BATCH_FILES = 20
 export const FGX_FILE_VERSION = 0x02
 export const FGX_FILE_MODE = 0x03
 
+/**
+ * 产出侧折叠批量：每 32 块（32 MiB）收拢为一个中间 Blob。
+ * `new Blob(parts)` 会把数据快照进浏览器 blob 存储（大块可落盘），
+ * 折叠后原始 Uint8Array/ArrayBuffer 即可被 GC 回收——加密与解密两条
+ * 产出路径共用此口径，512 MiB 上限文件的 JS 堆峰值 ≈ 32 MiB × 少数几份，
+ * 而非密文全额驻留（P1 修复：见审查报告）。
+ */
+export const FOLD_PARTS_EVERY = 32
+
 /** 与 hash-checksum 同构的流式源：测试可注入假源（512 MiB 拒绝时证明零读入）。 */
 export type BlobSource = Pick<Blob, 'size' | 'slice'>
 
-export type FileEnvelopeError = 'file-too-large' | 'bad-envelope' | 'gcm-auth'
+export type FileEnvelopeError = 'file-too-large' | 'name-too-long' | 'bad-envelope' | 'gcm-auth'
 
 export type EncryptFileOutcome =
   | { ok: true; blob: Blob }
-  | { ok: false; reason: Extract<FileEnvelopeError, 'file-too-large'> }
+  | { ok: false; reason: Extract<FileEnvelopeError, 'file-too-large' | 'name-too-long'> }
 
 export type DecryptFileOutcome =
   | { ok: true; blob: Blob; fileName: string }
   | { ok: false; reason: FileEnvelopeError }
 
 const MAGIC = [0x46, 0x47, 0x58, 0x31] as const // "FGX1"
-const MAX_NAME_BYTES = 4096
+/** 文件名 UTF-8 字节上限（加解密两侧对称的守卫值）。 */
+export const MAX_NAME_BYTES = 4096
 
 function randomBytes(n: number): Uint8Array {
   const bytes = new Uint8Array(n)
@@ -118,7 +133,8 @@ export function parseFileEnvelopeHeader(bytes: Uint8Array): FileHeaderParse {
   const nameBytes = bytes.slice(nameOffset, nameOffset + nameLen)
   let fileName: string
   try {
-    fileName = new TextDecoder().decode(nameBytes)
+    // fatal：非法 UTF-8 序列抛错 → bad-envelope（不做 U+FFFD 替换容忍）
+    fileName = new TextDecoder('utf-8', { fatal: true }).decode(nameBytes)
   } catch {
     return { ok: false, reason: 'bad-envelope' }
   }
@@ -172,6 +188,8 @@ export async function encryptFileEnvelope(args: {
   const salt = randomBytes(SALT_BYTES)
   const prefix = randomBytes(4)
   const nameBytes = new TextEncoder().encode(args.fileName)
+  // 与解密侧 MAX_NAME_BYTES 对称：超限前置拒绝（uint16 nameLen 也因此永不截断）
+  if (nameBytes.length > MAX_NAME_BYTES) return { ok: false, reason: 'name-too-long' }
   const chunkCount = chunkCountFor(total)
   const header = new Uint8Array(44 + nameBytes.length)
   header.set(MAGIC, 0)
@@ -191,7 +209,15 @@ export async function encryptFileEnvelope(args: {
   const keyBytes = await deriveAesKeyBytes(args.passphrase, salt)
   const key = await crypto.subtle.importKey('raw', keyBytes as BufferSource, 'AES-GCM', false, ['encrypt'])
 
-  const parts: BlobPart[] = [header]
+  // 产出侧折叠：每 FOLD_PARTS_EVERY 块收拢为中间 Blob（见 FOLD_PARTS_EVERY 注释）
+  const parts: BlobPart[] = []
+  const group: BlobPart[] = [header]
+  const fold = (): void => {
+    if (group.length > 0) {
+      parts.push(new Blob(group))
+      group.length = 0
+    }
+  }
   let loaded = 0
   let index = 0
   while (loaded < total) {
@@ -209,11 +235,13 @@ export async function encryptFileEnvelope(args: {
         chunk as BufferSource,
       ),
     )
-    parts.push(sealed)
+    group.push(sealed)
+    if (group.length >= FOLD_PARTS_EVERY) fold()
     loaded = end
     index++
     args.onProgress?.(loaded, total)
   }
+  fold()
   return { ok: true, blob: new Blob(parts) }
 }
 
@@ -248,7 +276,15 @@ export async function decryptFileEnvelope(args: {
   const key = await crypto.subtle.importKey('raw', keyBytes as BufferSource, 'AES-GCM', false, ['decrypt'])
   const header = headBuf.slice(0, headerBytes) // AAD = 真实头部字节
 
+  // 产出侧折叠（与加密侧同口径）：明文块每 FOLD_PARTS_EVERY 块收拢为中间 Blob
   const parts: BlobPart[] = []
+  const group: BlobPart[] = []
+  const fold = (): void => {
+    if (group.length > 0) {
+      parts.push(new Blob(group))
+      group.length = 0
+    }
+  }
   let loaded = 0
   for (let index = 0; index < view.chunkCount; index++) {
     const plainSize = Math.min(FILE_CHUNK_BYTES, view.fileSize - loaded)
@@ -265,7 +301,8 @@ export async function decryptFileEnvelope(args: {
         key,
         seg as BufferSource,
       )
-      parts.push(plain)
+      group.push(plain)
+      if (group.length >= FOLD_PARTS_EVERY) fold()
     } catch {
       // 块级认证失败 → 整体失败单态：不输出半截文件，错口令与篡改不可区分
       return { ok: false, reason: 'gcm-auth' }
@@ -273,5 +310,6 @@ export async function decryptFileEnvelope(args: {
     loaded += plainSize
     args.onProgress?.(loaded, view.fileSize)
   }
+  fold()
   return { ok: true, blob: new Blob(parts), fileName: sanitizeFileName(view.fileName) }
 }

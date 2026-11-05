@@ -28,8 +28,8 @@ export const WORD_COUNT_OPTIONS = [12, 15, 18, 21, 24] as const
 export type WordCount = (typeof WORD_COUNT_OPTIONS)[number]
 export const DEFAULT_WORD_COUNT: WordCount = 12
 
-/** 校验区实时防抖间隔（校验类实时防抖 300ms，附录 §2）。 */
-export const DEBOUNCE_MS = 300
+/** 校验区实时防抖间隔（校验类实时防抖 300ms，附录 §2，共享单源 @/lib/pasteLimit）。 */
+export { CONVERT_DEBOUNCE_MS as DEBOUNCE_MS } from '@/lib/pasteLimit'
 
 /** seed 长度（字节 / hex 字符），BIP39 规范固定。 */
 export const SEED_BYTES = 64

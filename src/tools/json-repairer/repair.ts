@@ -14,11 +14,13 @@
  * - JSONRepairError 行内报错；输出保留旧值由组件层实现（只错该处）。
  */
 
-/** 粘贴输入上限（UTF-8 字节）：1 MiB（平台文本上限惯例）。 */
-export const PASTE_MAX_BYTES = 1024 * 1024
+/** 粘贴输入上限（UTF-8 字节）：1 MiB（平台文本上限惯例，共享单源 @/lib/pasteLimit）。 */
+export { PASTE_MAX_BYTES, isPasteWithinLimit, utf8ByteLength } from '@/lib/pasteLimit'
 
-/** 实时修复防抖间隔（转换类实时防抖 300ms，附录 §2）。 */
-export const DEBOUNCE_MS = 300
+/** 实时修复防抖间隔（转换类实时防抖 300ms，附录 §2，共享单源 @/lib/pasteLimit）。 */
+export { CONVERT_DEBOUNCE_MS as DEBOUNCE_MS } from '@/lib/pasteLimit'
+
+import { isPasteWithinLimit } from '@/lib/pasteLimit'
 
 /** 下载文件名（附录 §5 输出命名：repaired.json）。 */
 export const DOWNLOAD_FILENAME = 'repaired.json'
@@ -36,17 +38,6 @@ export interface RepairError {
 export type RepairOutcome =
   | { ok: true; value: string }
   | { ok: false; errors: RepairError[] }
-
-const encoder = new TextEncoder()
-
-/** UTF-8 字节数（码点安全：TextEncoder 按完整码点编码，多字节字符如实累计）。 */
-export function utf8ByteLength(text: string): number {
-  return encoder.encode(text).length
-}
-
-export function isPasteWithinLimit(text: string): boolean {
-  return utf8ByteLength(text) <= PASTE_MAX_BYTES
-}
 
 /* ------------------------------------------------------------------ *
  * jsonrepair（首用 dynamic import，模块引用缓存共享单实例）

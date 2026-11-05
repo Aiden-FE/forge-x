@@ -7,7 +7,7 @@
  * 仅保证「前缀 ∈ 测试 BIN 集」的结构校验可过，不指向任何真实账户。
  */
 
-import type { Rng } from './cnId'
+import type { Rng } from './rng'
 
 /** 测试 BIN 前缀集（6 位，CUP 62 段公开常用借记卡 BIN）。 */
 export const BANK_BIN_PREFIXES: readonly string[] = [

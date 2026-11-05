@@ -25,6 +25,19 @@ export const DEFAULT_OPENSSL_CIPHER: OpenSslCipher = 'aes-256-cbc'
 export const DEFAULT_OPENSSL_KDF: OpenSslKdf = 'md5'
 export const DEFAULT_PBKDF2_ITERATIONS = 10000
 
+/**
+ * PBKDF2 迭代数上限（钳制闸）：手输巨值（如 1e12）会让 WebCrypto deriveBits
+ * 长占数分钟级、负数/小数直接抛错落入误导性的 decrypt-failed——统一在
+ * 逻辑层收敛为 [1, 10_000_000] 的整数（1000 万轮 ≈ 数秒上限，UI 可承受）。
+ */
+export const MAX_PBKDF2_ITERATIONS = 10_000_000
+
+/** 迭代数归一：非有限值（NaN/±∞/空串经 v-model.number 而来）回默认；截断取整并钳到 [1, MAX]。 */
+export function normalizeOpenSslIterations(raw: number): number {
+  if (!Number.isFinite(raw)) return DEFAULT_PBKDF2_ITERATIONS
+  return Math.min(Math.max(Math.trunc(raw), 1), MAX_PBKDF2_ITERATIONS)
+}
+
 const SALTED_MAGIC = [0x53, 0x61, 0x6c, 0x74, 0x65, 0x64, 0x5f, 0x5f] as const // "Salted__"
 const SALTED_SALT_BYTES = 8
 const CBC_IV_BYTES = 16
@@ -148,7 +161,8 @@ export async function decryptOpenSsl(args: {
           parsed.salt,
           keyLen,
           CBC_IV_BYTES,
-          args.iterations ?? DEFAULT_PBKDF2_ITERATIONS,
+          // 钳制闸：手输巨值/负数/小数统一收敛（见 normalizeOpenSslIterations）
+          normalizeOpenSslIterations(args.iterations ?? DEFAULT_PBKDF2_ITERATIONS),
         )
 
   let cryptoKey: CryptoKey

@@ -238,10 +238,13 @@ export function parseOklch(input: string): OklchParseResult {
  * 文本输出（显示量化即规范值）
  * ------------------------------------------------------------------ */
 
-/** 量化并去尾零：62.80 → "62.8"，25.00 → "25"。 */
+/** 量化并去尾零：62.80 → "62.8"，25.00 → "25"；无小数点时原样（decimals=0 防御——
+ *  旧正则 /\.?0+$/ 会把整数 "100" 削成 "1"，先判 contains('.') 再剥）。 */
 function trimFixed(value: number, decimals: number): string {
   const fixed = value.toFixed(decimals)
-  const trimmed = fixed.replace(/\.?0+$/, '')
+  const trimmed = fixed.includes('.')
+    ? fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+    : fixed
   return trimmed === '' || trimmed === '-' ? '0' : trimmed
 }
 

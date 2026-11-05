@@ -9,7 +9,12 @@
  *   一律 `0x` + 8 位小写十六进制补零，粘回输入框即可复现。
  */
 
-import type { Rng } from './cnId'
+/**
+ * 随机源契约：返回 [0, 1) 均匀浮点。生产与测试统一注入 PRNG（同 seed 同序列）。
+ * 归属地说明：契约随「唯一生产随机源」住在 rng.ts（v0.5.0 审查修正——原先
+ * 定义在 cnId.ts，rng.ts 反向引用属归属错位）；cnId/bankCard/generator 均从这里取。
+ */
+export type Rng = () => number
 
 /** seed 展示宽度（32-bit = 8 位十六进制）。 */
 export const SEED_HEX_WIDTH = 8

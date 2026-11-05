@@ -16,7 +16,7 @@
  * 数据语言作用于自然语言字段（姓名/邮箱/地址/公司名/Lorem 段落）。
  */
 
-import type { Rng } from './cnId'
+import type { Rng } from './rng'
 import { generateIdCard } from './cnId'
 import { generateBankCard } from './bankCard'
 import { deriveRandomSeed, mulberry32, parseSeedHex } from './rng'
