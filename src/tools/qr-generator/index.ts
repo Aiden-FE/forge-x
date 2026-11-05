@@ -1,4 +1,4 @@
-import QrGenerator from './QrGenerator.vue'
+import { defineAsyncComponent } from 'vue'
 import type { ToolMeta } from '@/types/tool'
 
 export default {
@@ -7,6 +7,7 @@ export default {
   description: '输入文本生成二维码 SVG',
   category: 'generate',
   icon: 'QrCode',
-  component: QrGenerator,
+  // 附录 §1：ToolMeta.component 一律异步组件（首屏第三方增量 0 的前提）。
+  component: defineAsyncComponent(() => import('./QrGenerator.vue')),
   keywords: ['qr', 'qrcode', '二维码', 'QR Code', 'generator', 'svg'],
 } satisfies ToolMeta
