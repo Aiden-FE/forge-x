@@ -11,6 +11,15 @@
           :placeholder="t('qrGenerator.inputPlaceholder')"
           rows="4"
         />
+        <p v-if="tooLong" class="error" data-test="qr-limit-error">
+          {{
+            t('qrGenerator.limitError', {
+              ecc,
+              limit: String(capacity),
+              actual: String(bytes),
+            })
+          }}
+        </p>
         <div class="controls">
           <div class="control">
             <span class="label">{{ t('qrGenerator.eccLabel') }}</span>
@@ -62,6 +71,9 @@
             </button>
           </div>
         </template>
+        <p v-else-if="tooLong" class="empty error" data-test="qr-limit-empty">
+          {{ t('qrGenerator.limitEmpty') }}
+        </p>
         <p v-else class="empty" data-test="qr-empty">{{ t('qrGenerator.empty') }}</p>
       </div>
     </div>
@@ -79,9 +91,11 @@ import {
   DEFAULT_ECC,
   DEFAULT_QUIET_ZONE,
   ECC_LEVELS,
+  MAX_INPUT_BYTES,
   MAX_QUIET_ZONE,
   MIN_QUIET_ZONE,
   generateQr,
+  utf8ByteLength,
 } from './qr'
 import type { EccLevel } from './qr'
 
@@ -101,7 +115,15 @@ const text = ref('')
 const ecc = ref<EccLevel>(DEFAULT_ECC)
 const quietZone = ref(DEFAULT_QUIET_ZONE)
 
-const result = computed(() => generateQr(text.value, ecc.value, quietZone.value))
+const capacity = computed(() => MAX_INPUT_BYTES[ecc.value])
+const bytes = computed(() => utf8ByteLength(text.value))
+const tooLong = computed(() => bytes.value > capacity.value)
+
+// Over-capacity input is reported inline and never reaches the encoder: the
+// library throws on `make()` and the exception would abort this render.
+const result = computed(() =>
+  tooLong.value ? null : generateQr(text.value, ecc.value, quietZone.value),
+)
 
 function download() {
   if (!result.value) return
@@ -292,5 +314,10 @@ function clear() {
   padding: var(--space-lg);
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
+}
+
+.error {
+  font-size: 13px;
+  color: var(--error);
 }
 </style>

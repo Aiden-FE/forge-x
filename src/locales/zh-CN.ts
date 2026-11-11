@@ -333,6 +333,8 @@ const zhCN: LocaleMessages = {
     download: '下载 SVG',
     clear: '清空',
     empty: '请输入文本以生成二维码',
+    limitError: '内容过长：纠错级别 {{ecc}} 最多编码 {{limit}} 字节（UTF-8），当前 {{actual}} 字节。',
+    limitEmpty: '内容超出容量，无法生成二维码',
   },
 }
 

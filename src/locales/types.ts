@@ -329,6 +329,8 @@ export interface LocaleMessages {
     download: string
     clear: string
     empty: string
+    limitError: string
+    limitEmpty: string
   }
   [key: string]: any
 }

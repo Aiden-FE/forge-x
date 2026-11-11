@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_QUIET_ZONE,
   ECC_LEVELS,
+  MAX_INPUT_BYTES,
   MAX_QUIET_ZONE,
   MIN_QUIET_ZONE,
   generateQr,
   generateQrMatrix,
+  isOverCapacity,
   matrixToSvg,
   normalizeQuietZone,
+  utf8ByteLength,
 } from './qr'
 import type { QrMatrix } from './qr'
 
@@ -203,5 +206,69 @@ describe('QR 标准结构（可扫描性逻辑对照）', () => {
     expect(r.matrix.moduleCount).toBeGreaterThanOrEqual(21)
     expect(r.matrix.moduleCount % 4).toBe(1) // 有效 QR 版本尺寸：21 + 4k
     expect(r.matrix.isDark(0, 0)).toBe(true) // finder 角必然为暗
+  })
+})
+
+describe('输入容量上限（超限不抛异常）', () => {
+  it('容量为 version 40 Byte 模式的 UTF-8 字节上限', () => {
+    expect(MAX_INPUT_BYTES).toEqual({ L: 2953, M: 2331, Q: 1663, H: 1273 })
+  })
+
+  it('UTF-8 字节计数覆盖 ASCII / CJK / emoji', () => {
+    expect(utf8ByteLength('')).toBe(0)
+    expect(utf8ByteLength('abc')).toBe(3)
+    expect(utf8ByteLength('中')).toBe(3)
+    expect(utf8ByteLength('😀')).toBe(4)
+  })
+
+  it('空输入与上限内输入不判超限', () => {
+    for (const level of ECC_LEVELS) {
+      expect(isOverCapacity('', level), level).toBe(false)
+      expect(isOverCapacity('a'.repeat(MAX_INPUT_BYTES[level]), level), level).toBe(false)
+    }
+  })
+
+  it('恰好达到上限的 ASCII 输入仍可生成（各级别均为 version 40）', () => {
+    for (const level of ECC_LEVELS) {
+      const r = generateQr('a'.repeat(MAX_INPUT_BYTES[level]), level, 4)
+      expect(r, level).not.toBeNull()
+      expect(r!.matrix.moduleCount, level).toBe(177) // 21 + 4 * 39
+    }
+  })
+
+  it('超过上限的 ASCII 输入返回 null 而不是抛异常', () => {
+    const over = 'a'.repeat(MAX_INPUT_BYTES.M + 1)
+    expect(isOverCapacity(over, 'M')).toBe(true)
+    expect(() => generateQr(over, 'M', 4)).not.toThrow()
+    expect(generateQr(over, 'M', 4)).toBeNull()
+  })
+
+  it('多字节字符按 UTF-8 字节判限，不会因字符数少而漏判', () => {
+    // M: 2331 = 3 * 777（中文每字 3 字节）
+    const cjkAtLimit = '中'.repeat(MAX_INPUT_BYTES.M / 3)
+    expect(isOverCapacity(cjkAtLimit, 'M')).toBe(false)
+    expect(generateQr(cjkAtLimit, 'M', 4)).not.toBeNull()
+
+    // H: 1273 = 4 * 318 + 1（emoji 每个 4 字节）
+    const emojiAtLimit = '😀'.repeat(318) + 'a'
+    expect(utf8ByteLength(emojiAtLimit)).toBe(MAX_INPUT_BYTES.H)
+    expect(isOverCapacity(emojiAtLimit, 'H')).toBe(false)
+    expect(generateQr(emojiAtLimit, 'H', 4)).not.toBeNull()
+  })
+
+  it('超出一个字节即判超限，且各纠错级别都安全返回 null', () => {
+    for (const level of ECC_LEVELS) {
+      const over = 'a'.repeat(MAX_INPUT_BYTES[level] + 1)
+      expect(isOverCapacity(over, level), level).toBe(true)
+      expect(() => generateQr(over, level, 4), level).not.toThrow()
+      expect(generateQr(over, level, 4), level).toBeNull()
+    }
+  })
+
+  it('极端超长输入在进入编码器前被拦下', () => {
+    const huge = 'x'.repeat(100_000)
+    expect(isOverCapacity(huge, 'H')).toBe(true)
+    expect(() => generateQr(huge, 'H', 4)).not.toThrow()
+    expect(generateQr(huge, 'H', 4)).toBeNull()
   })
 })

@@ -333,6 +333,8 @@ const en: LocaleMessages = {
     download: 'Download SVG',
     clear: 'Clear',
     empty: 'Enter text to generate a QR code',
+    limitError: 'Input too long: ECC {{ecc}} supports at most {{limit}} bytes (UTF-8); currently {{actual}} bytes.',
+    limitEmpty: 'Input exceeds capacity — cannot generate a QR code',
   },
 }
 

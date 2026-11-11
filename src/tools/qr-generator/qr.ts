@@ -1,4 +1,7 @@
 import qrcode from 'qrcode-generator'
+import { utf8ByteLength } from '@/lib/pasteLimit'
+
+export { utf8ByteLength }
 
 export const ECC_LEVELS = ['L', 'M', 'Q', 'H'] as const
 export type EccLevel = (typeof ECC_LEVELS)[number]
@@ -7,6 +10,21 @@ export const DEFAULT_ECC: EccLevel = 'M'
 export const MIN_QUIET_ZONE = 0
 export const MAX_QUIET_ZONE = 10
 export const DEFAULT_QUIET_ZONE = 4
+
+/**
+ * Byte-mode capacity of a version-40 QR symbol per ECC level.
+ *
+ * The library encodes in Byte mode by default (we patch it to UTF-8), so the
+ * limits are UTF-8 bytes: L 2953, M 2331, Q 1663, H 1273. Input above the
+ * current level's capacity makes `qrcode-generator` throw during `make()`;
+ * browsers must never let that exception reach the render path.
+ */
+export const MAX_INPUT_BYTES: Record<EccLevel, number> = {
+  L: 2953,
+  M: 2331,
+  Q: 1663,
+  H: 1273,
+}
 
 export interface QrMatrix {
   /** Number of modules per side (version 1 = 21). */
@@ -38,6 +56,11 @@ export function normalizeQuietZone(value: number): number {
   const n = Math.floor(Number(value))
   if (!Number.isFinite(n)) return DEFAULT_QUIET_ZONE
   return Math.min(MAX_QUIET_ZONE, Math.max(MIN_QUIET_ZONE, n))
+}
+
+/** Whether `text` cannot fit the largest symbol for `ecc` (UTF-8 bytes). */
+export function isOverCapacity(text: string, ecc: EccLevel): boolean {
+  return utf8ByteLength(text) > MAX_INPUT_BYTES[ecc]
 }
 
 export function generateQrMatrix(text: string, ecc: EccLevel): QrMatrix {
@@ -76,6 +99,9 @@ export function matrixToSvg(matrix: QrMatrix, quietZone: number): string {
 /** Returns null for empty input (the UI shows the empty state instead). */
 export function generateQr(text: string, ecc: EccLevel, quietZone: number): QrSvg | null {
   if (!text) return null
+  // Gate before the encoder: `make()` throws a string for over-capacity input,
+  // which would abort the component render. The UI shows the limit instead.
+  if (isOverCapacity(text, ecc)) return null
   const q = normalizeQuietZone(quietZone)
   const matrix = generateQrMatrix(text, ecc)
   return {
