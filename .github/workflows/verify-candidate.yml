@@ -146,7 +146,7 @@ jobs:
 
   macos:
     needs: preflight
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -191,7 +191,7 @@ jobs:
           {
             "macos_apple_silicon_first_open_offline_tools": {
               "status": "PASS",
-              "evidence": "DMG mounted, ad-hoc signature verified, bundle version matched, arm64 slice launched and stayed alive 10s on macos-14"
+              "evidence": "DMG mounted, ad-hoc signature verified, bundle version matched, arm64 slice launched and stayed alive 10s on macos-15"
             },
             "macos14_intel_first_open_offline_tools": {
               "status": "SKIP",
