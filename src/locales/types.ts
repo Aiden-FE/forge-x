@@ -16,6 +16,7 @@ export interface LocaleMessages {
     convert: string
     text: string
     debug: string
+    favorites: string
   }
   theme: {
     toggleDark: string
@@ -24,6 +25,13 @@ export interface LocaleMessages {
   lang: {
     switchToCn: string
     switchToEn: string
+  }
+  favorites: {
+    add: string
+    remove: string
+    empty: string
+    hint: string
+    browseAll: string
   }
   settings: {
     title: string

@@ -18,6 +18,7 @@ const en: LocaleMessages = {
     convert: 'Convert',
     text: 'Text',
     debug: 'Debug & Test',
+    favorites: 'Favorites',
   },
   theme: {
     toggleDark: 'Switch to dark theme',
@@ -26,6 +27,13 @@ const en: LocaleMessages = {
   lang: {
     switchToCn: 'Switch to Chinese',
     switchToEn: 'Switch to English',
+  },
+  favorites: {
+    add: 'Add to favorites',
+    remove: 'Remove from favorites',
+    empty: 'No favorites yet',
+    hint: 'Star a tool from its card in All to add it here.',
+    browseAll: 'Browse all tools',
   },
   settings: {
     title: 'Provider settings',

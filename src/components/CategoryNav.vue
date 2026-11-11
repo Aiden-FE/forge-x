@@ -9,6 +9,7 @@
           v-for="cat in categories"
           :key="cat.id"
           :class="['nav-item', { active: activeCategory === cat.id }]"
+          :data-test="`nav-${cat.id}`"
           @click="selectCategory(cat.id)"
         >
           <component :is="icons[cat.icon]" :size="18" />
@@ -23,7 +24,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { X, LayoutGrid, Languages, Binary, Braces, Sparkles, ArrowLeftRight, Type, Bug } from 'lucide-vue-next'
+import { X, LayoutGrid, Languages, Binary, Braces, Sparkles, ArrowLeftRight, Type, Bug, Star } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useI18n } from '@/composables/useI18n'
 
@@ -42,7 +43,7 @@ const categories = computed(() =>
 const activeCategory = computed(() => store.activeCategory)
 
 const icons: Record<string, any> = {
-  LayoutGrid, Languages, Binary, Braces, Sparkles, ArrowLeftRight, Type, Bug
+  LayoutGrid, Languages, Binary, Braces, Sparkles, ArrowLeftRight, Type, Bug, Star
 }
 
 function selectCategory(id: string) {

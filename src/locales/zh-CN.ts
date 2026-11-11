@@ -18,6 +18,7 @@ const zhCN: LocaleMessages = {
     convert: '转换',
     text: '文本处理',
     debug: '调试测试',
+    favorites: '收藏',
   },
   theme: {
     toggleDark: '切换暗色主题',
@@ -26,6 +27,13 @@ const zhCN: LocaleMessages = {
   lang: {
     switchToCn: '切换到中文',
     switchToEn: '切换到英文',
+  },
+  favorites: {
+    add: '收藏',
+    remove: '取消收藏',
+    empty: '还没有收藏的工具',
+    hint: '在「全部」里点击工具卡片右上角的星标，即可收藏。',
+    browseAll: '去全部工具',
   },
   settings: {
     title: '供应商设置',
