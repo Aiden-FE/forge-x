@@ -34,13 +34,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Menu, Sun, Moon, Settings } from 'lucide-vue-next'
 import { useToolsStore } from '@/stores/tools'
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
 import { useI18n } from '@/composables/useI18n'
+import { isTextEntryTarget } from '@/lib/textEntryTarget'
 
 const emit = defineEmits(['toggle-sidebar'])
 const router = useRouter()
@@ -54,18 +55,27 @@ function onSearch() {
   store.setSearchQuery(query.value)
 }
 
+/** Enter in the search box jumps to the first matching tool. */
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
-    e.preventDefault()
-    focusSearch()
+  if (e.key !== 'Enter') return
+  e.preventDefault()
+  const filtered = store.filteredTools
+  if (filtered.length > 0) {
+    router.push(`/tool/${filtered[0].id}`)
   }
-  if (e.key === 'Enter' && document.activeElement?.classList.contains('search-input')) {
-    e.preventDefault()
-    const filtered = store.filteredTools
-    if (filtered.length > 0) {
-      router.push(`/tool/${filtered[0].id}`)
-    }
-  }
+}
+
+/**
+ * Global `/` shortcut. It must yield while the user is typing in any text
+ * entry surface (otherwise slashes are swallowed mid-input) and must not
+ * steal modified or composing keys.
+ */
+function handleGlobalShortcut(e: KeyboardEvent) {
+  if (e.key !== '/' || e.defaultPrevented || e.isComposing) return
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (isTextEntryTarget(e.target)) return
+  e.preventDefault()
+  focusSearch()
 }
 
 function focusSearch() {
@@ -80,14 +90,8 @@ function openSettings() {
   router.push({ name: 'provider-settings' })
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', (e) => {
-    if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
-      e.preventDefault()
-      focusSearch()
-    }
-  })
-})
+onMounted(() => window.addEventListener('keydown', handleGlobalShortcut))
+onUnmounted(() => window.removeEventListener('keydown', handleGlobalShortcut))
 </script>
 
 <style scoped>
